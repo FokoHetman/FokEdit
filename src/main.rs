@@ -202,11 +202,13 @@ impl Editor for Program {
     result += &(vec![" "; terx as usize - self.buffers.len()*max_buf_display_len]).into_iter().collect::<String>();
     //result +=  "\x1b[0m";
     result += "\x1b[48;2;44;22;58m";
-    let mut display_sl = 0 as u32;
-    if self.get_buffer().cursor.1 > (tery-3) as u32 {
-      display_sl = self.get_buffer().cursor.1 % (tery-3) as u32;
+    //let mut display_sl = 0 as u32;
+    if self.get_buffer().cursor.1 > (tery-4) as u32 + self.get_buffer().display_start_line {
+      self.get_buffer().display_start_line = self.get_buffer().cursor.1 % (tery-4) as u32;
+    } else if self.get_buffer().cursor.1 < self.get_buffer().display_start_line {
+      self.get_buffer().display_start_line = self.get_buffer().cursor.1;
     }
-    self.get_buffer().display_start_line = display_sl;
+    //self.get_buffer().display_start_line = display_sl;
     let left = self.get_buffer().display_start_line as usize;
 
     
@@ -237,7 +239,10 @@ impl Editor for Program {
       ioc.next();
       self.io = ioc.collect();
     }
-    result += &(self.io.clone() + &(vec![" "; terx as usize - self.io.len() - 1]).into_iter().collect::<String>());
+    let c = self.get_buffer().cursor;
+    let cursor_string = format!("{}::{}:{};", self.get_buffer().display_start_line, c.0, c.1);
+    result += &(self.io.clone() + &(vec![" "; terx as usize - self.io.len() - 1 - cursor_string.len()]).into_iter().collect::<String>());
+    result += &cursor_string;
     result += match self.state {
       State::Input => "1",
       State::Control => "0",
@@ -250,7 +255,7 @@ impl Editor for Program {
       },
       _ => {
         let column = self.get_buffer().cursor.0+1;
-        result += &format!("\x1b[{line};{column}H", line=self.get_buffer().cursor.1+2);
+        result += &format!("\x1b[{line};{column}H", line=self.get_buffer().cursor.1+2 - self.get_buffer().display_start_line);
       },
     };
     result += "\x1b[0m";
@@ -299,7 +304,7 @@ impl Editor for Program {
     self.io_cursor = n0 as u32;
   }
   fn write_string(&mut self, string: String) {
-    let index = (self.get_buffer().display_start_line + self.get_buffer().cursor.1) as usize;
+    let index = (self.get_buffer().cursor.1) as usize;
     let x = self.get_buffer().cursor.0 as usize;
     let str1 = self.get_buffer().lines[index][..x].to_owned() + &string;
     self.get_buffer().lines[index] = str1 + &self.get_buffer().lines[index][x..];
