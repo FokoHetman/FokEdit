@@ -203,30 +203,83 @@ impl Editor for Program {
     //result +=  "\x1b[0m";
     result += "\x1b[48;2;44;22;58m";
     //let mut display_sl = 0 as u32;
-    if self.get_buffer().cursor.1 > (tery-4) as u32 + self.get_buffer().display_start_line {
-      self.get_buffer().display_start_line = self.get_buffer().cursor.1 % (tery-4) as u32;
+    let free_y = tery-3;
+    let free_x = terx;
+    if self.get_buffer().cursor.1 > (free_y-1) as u32 + self.get_buffer().display_start_line {
+
+      if ((free_y-1) as u32) < self.get_buffer().cursor.1 {
+        self.get_buffer().display_start_line = self.get_buffer().cursor.1 - (free_y-1) as u32;
+      } else {
+        self.get_buffer().display_start_line = (free_y-1) as u32 - self.get_buffer().cursor.1;
+      }
+
     } else if self.get_buffer().cursor.1 < self.get_buffer().display_start_line {
       self.get_buffer().display_start_line = self.get_buffer().cursor.1;
     }
-    //self.get_buffer().display_start_line = display_sl;
+
+    if self.get_buffer().cursor.0 > (free_x-1) as u32 + self.get_buffer().display_offset_collumn {
+
+      if ((free_x-1) as u32) < self.get_buffer().cursor.0 {
+        self.get_buffer().display_offset_collumn = self.get_buffer().cursor.0 - (free_x-1) as u32;
+      } else {
+        self.get_buffer().display_offset_collumn = (free_x-1) as u32 - self.get_buffer().cursor.0;
+      }
+    } else if self.get_buffer().cursor.0 < self.get_buffer().display_offset_collumn {
+      self.get_buffer().display_offset_collumn = self.get_buffer().cursor.0;
+    }
+    
+
     let left = self.get_buffer().display_start_line as usize;
 
-    
-    if (self.get_buffer().lines.len() as u16) < ((tery-3) - left as u16) {
-      for i in self.get_buffer().lines.clone() {
-        result += &(i.to_owned() + &vec![" "; terx as usize - i.len() ].into_iter().collect::<String>() + "\n");
+    let offset = self.get_buffer().display_offset_collumn as usize;
+    if (self.get_buffer().lines.len() as u16) < (free_y + left as u16) {
+      let rlen = self.get_buffer().lines.len();
+      
+      for i in &self.get_buffer().lines[left..rlen] {
+        if offset > 0 {
+          if i.len()  > offset {
+            let max = std::cmp::min(offset+free_x as usize, i.len());
+            result += &(i.to_owned()[offset..max].to_owned() + &vec![" "; free_x as usize - (max-offset)].into_iter().collect::<String>() + "\n");
+          } else {
+            result += &(vec![" "; free_x as usize ].into_iter().collect::<String>() + "\n");
+          }
+        } else {
+          if i.len() <= free_x as usize {
+            result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+          } else {
+            result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
+          }
+        }
       }
       result += "\x1b[38;2;5;8;191m";
-      for i in 0..(((tery-3) - left as u16) - self.get_buffer().lines.len() as u16) {
-        result += &("~".to_owned() + &vec![" "; terx as usize - 1].into_iter().collect::<String>() + "\n");
+      for i in 0..(((free_y) as u16) - (rlen - left) as u16) {
+        result += &("~".to_owned() + &vec![" "; free_x as usize - 1].into_iter().collect::<String>() + "\n");
       }
       result += "\x1b[38;2;255;255;255m";
     } 
     else {
-      for i in &self.get_buffer().lines[left..left+(tery-3) as usize] {
-        result += &(i.to_owned() + &vec![" "; terx as usize - i.len() ].into_iter().collect::<String>() + "\n");
+
+      //let reallen = self.get_buffer().lines.len();
+      for i in &self.get_buffer().lines[left..left+(free_y) as usize] {
+        if offset > 0 {
+          if i.len()  > offset {
+            let max = std::cmp::min(offset+free_x as usize, i.len());
+            result += &(i.to_owned()[offset..max].to_owned() + &vec![" "; free_x as usize - (max-offset)].into_iter().collect::<String>() + "\n");
+          } else {
+            result += &(vec![" "; free_x as usize ].into_iter().collect::<String>() + "\n");
+          }
+        } else {
+          if i.len() <= free_x as usize {
+            result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+          } else {
+            result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
+          }
+        }
       }
     }
+      //if i.len()<free_x {
+      //    result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+      //  }
 
 
     result += "\x1b[48;2;65;31;86m";
@@ -240,7 +293,8 @@ impl Editor for Program {
       self.io = ioc.collect();
     }
     let c = self.get_buffer().cursor;
-    let cursor_string = format!("{}::{}:{};", self.get_buffer().display_start_line, c.0, c.1);
+    let col = self.get_buffer().display_offset_collumn;
+    let cursor_string = format!("{}:{}:;:{}:{};", col, self.get_buffer().display_start_line, c.0, c.1);
     result += &(self.io.clone() + &(vec![" "; terx as usize - self.io.len() - 1 - cursor_string.len()]).into_iter().collect::<String>());
     result += &cursor_string;
     result += match self.state {
@@ -254,7 +308,7 @@ impl Editor for Program {
         result += &format!("\x1b[{tery};{column}H");
       },
       _ => {
-        let column = self.get_buffer().cursor.0+1;
+        let column = self.get_buffer().cursor.0+1 - self.get_buffer().display_offset_collumn;
         result += &format!("\x1b[{line};{column}H", line=self.get_buffer().cursor.1+2 - self.get_buffer().display_start_line);
       },
     };
@@ -391,7 +445,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
         },
         State::Input => {
           if program.get_buffer().cursor.0>0 {
-            let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
+            let index = (program.get_buffer().cursor.1) as usize;
             let x = program.get_buffer().cursor.0 as usize;
             let mut strc = program.get_buffer().lines[index][..x].chars();
             strc.next_back();
@@ -405,6 +459,9 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.get_buffer().lines.remove(cursor as usize);
             let x = (program.get_buffer().lines[cursor as usize -1].len() - cline.len()) as i32;
             program.move_cursor((x, -1));
+            if program.get_buffer().cursor.1 == program.get_buffer().lines.len() as u32 {
+              program.get_buffer().display_start_line -= 1;
+            }
           }
         },
         State::Control => {
@@ -545,7 +602,7 @@ fn main() {
       program.buffers.push(
         EditorBuffer {
           cursor: (0, 0),
-          lines: vec![],
+          lines: vec![String::new()],
           buf_type: BufferType::File,
           display_start_line: 0,
           display_offset_collumn: 0,
@@ -559,7 +616,7 @@ fn main() {
     program.buffers.push(
       EditorBuffer {
         cursor:  (0, 0),
-        lines: vec![],
+        lines: vec![String::new()],
         buf_type: BufferType::File,
         display_start_line: 0,
         display_offset_collumn: 0,
