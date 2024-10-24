@@ -2,7 +2,7 @@ use crate::foklang::core::AST::{*};
 use crate::foklang::core::env::Environment;
 use crate::foklang::core::interpreter::Interpreter;
 
-use crate::{Editor, Program};
+use crate::{ColorConfig, Editor, FokEditConfig, Program, RGB};
 
 use std::{process::Command, env, str, fs, collections::HashMap}; // TEMPORARY SOLUTION
 
@@ -423,14 +423,51 @@ pub fn move_buffer(arguments: Arguments) -> Proventus {
   }
 }
 
-/*
+
+fn getw(config: Proventus, string: &str) -> Proventus {
+  get(Arguments{function: FunctionArgs::double(config, Proventus{value: Fructa::Filum(String::from(string)), id: -1})})
+}
+
+fn uwInt(int: Proventus) -> i32 {
+  match int.value {
+    Fructa::Numerum(i) => i,
+    _ => 0
+  }
+}
+
 pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
   match arguments.function {
     FunctionArgs::singleProgram(config, program) => {
-      
+      let mut program = program;
+      let mut color_config = ColorConfig {..Default::default()};
+
+      let colors = getw(config, "colors");
+      match getw(colors.clone(), "background").value {
+        Fructa::Inventarii(i) => {
+          color_config.background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+        },
+        _ => {}
+      }
+      match getw(colors.clone(), "foreground").value {
+        Fructa::Inventarii(i) => {
+          color_config.foreground = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+        },
+        _ => {}
+      }
+      match getw(colors, "border").value {
+        Fructa::Inventarii(i) => {
+          color_config.border = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+        },
+        _ => {}
+      }
+
+
+      program.config = FokEditConfig{colors: color_config};
+      Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
+    _ => panic!("?")
   }
-}*/
+}
 
 
 

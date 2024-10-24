@@ -40,6 +40,9 @@ impl Foklang {
       }
     }
   }
+  pub fn raw_run(&mut self, input: String, program: Program) -> core::AST::Proventus {
+    self.interpreter.evaluate(self.parser.parse(self.tokenizer.tokenize(input)), &mut self.env, program.clone())
+  }
 }
 
 pub fn run(input: String, program: crate::Program) -> String {

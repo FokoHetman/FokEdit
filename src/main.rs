@@ -100,7 +100,38 @@ fn getch() -> char {
   io::stdin().bytes().next().unwrap().unwrap() as char
 }
 
+#[derive(Debug,Clone,PartialEq)]
+pub struct RGB {
+  r: u8,
+  g: u8,
+  b: u8,
+}
 
+#[derive(Debug,Clone,PartialEq)]
+pub struct ColorConfig {
+  background: RGB,
+  foreground: RGB,
+  border: RGB,
+}
+impl Default for ColorConfig {
+  fn default() -> Self {
+    Self {background: RGB{r: 0, g: 0, b: 0}, foreground: RGB{r: 0, g: 0, b: 0}, border: RGB{r: 0, g: 0, b: 0}}
+  }
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct FokEditConfig {
+  colors: ColorConfig,
+  /*
+  highlighting: HighlightingConfig,
+  options: FokEditOpts,
+  */
+}
+impl Default for FokEditConfig {
+  fn default() -> Self {
+    Self {colors: ColorConfig{..Default::default()}}
+  }
+}
 
 #[derive(Debug,Clone,PartialEq)]
 enum BufferType {
@@ -125,7 +156,7 @@ enum State {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-struct Program {
+pub struct Program {
   state: State,                 // Terminal State, described further in State enum 
   buffers: Vec<EditorBuffer>,   // Buffers, windows open - listed in 1st line
   current: usize,               // current Buffer index
@@ -136,6 +167,8 @@ struct Program {
   io_history: Vec<String>,      // history of used commands to scroll via arrows
   io_history_index: usize,      // index of history
   exit: bool,                   // whether to exit at the end of loop
+
+  config: FokEditConfig,
 }
 trait Editor {
   fn evaluate_io(&mut self) -> String;              // evaluate terminal line; use modified foklang for that
@@ -582,6 +615,7 @@ fn main() {
     exit: false,
 
     foklang: foklang::foklang::Foklang::new(),
+    config: FokEditConfig{..Default::default()},
   };
   let mut args = env::args();
   args.next();
@@ -624,6 +658,19 @@ fn main() {
         save_path: String::from(""),
       }
     );
+  }
+  if Path::new(&env::join_paths([Path::new(&env::home_dir().unwrap()), Path::new(".config/FokEdit/configuration.fok")].iter()).unwrap()).exists() {
+    let raw = program.foklang.raw_run(String::from("rgb r g b = [r g b];") 
+        + &fs::read_to_string(&env::join_paths([Path::new(&env::home_dir().unwrap()), Path::new(".config/FokEdit/configuration.fok")].iter()).unwrap()).unwrap(), program.clone());
+    
+    let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, program.clone()) });
+
+    match ran.value {
+      foklang::core::AST::Fructa::ProgramModifier(nprog) => {
+        program = nprog;
+      }
+      _ => {}
+    }
   }
 
 
