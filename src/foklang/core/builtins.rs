@@ -473,6 +473,9 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
 
       let mut keybinds = crate::Keybinds {..Default::default()};
 
+      let mut ops_config = crate::FokEditOps {..Default::default()};
+
+
       let keybindsc = getw(config.clone(), "keybinds");
 
       match keybindsc.value {
@@ -514,6 +517,38 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
               },
               _ => {}
             }
+          }
+        }
+        _ => {}
+      }
+
+      let ops = getw(config.clone(), "ops");
+      
+      match ops.value {
+        Fructa::Causor(_) => {
+          let line_numbers = getw(ops.clone(), "line_numbers");
+          match line_numbers.value {
+            Fructa::Causor(_) => {
+              match getw(line_numbers.clone(), "enable").value {
+                Fructa::Condicio(b) => {
+                  ops_config.line_numbers.enable = b;
+                }
+                _ => {}
+              }
+              match getw(line_numbers.clone(), "background").value {
+                Fructa::Inventarii(i) => {
+                  ops_config.line_numbers.background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+              match getw(line_numbers.clone(), "foreground").value {
+                Fructa::Inventarii(i) => {
+                  ops_config.line_numbers.foreground = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+            },
+            _ => {},
           }
         }
         _ => {}
@@ -624,7 +659,7 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       }
 
 
-      program.config = FokEditConfig{colors: color_config, elements: elements_config, keybinds};
+      program.config = FokEditConfig{colors: color_config, elements: elements_config, keybinds, ops: ops_config};
       Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
     _ => panic!("?")

@@ -176,10 +176,29 @@ impl Default for ColorConfig {
 }
 
 #[derive(Debug,Clone,PartialEq)]
+pub struct LineNumbers {
+  enable: bool,
+  background: RGB,
+  foreground: RGB,
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct FokEditOps {
+  line_numbers: LineNumbers,
+}
+impl Default for FokEditOps {
+  fn default() -> Self {
+    Self {line_numbers: LineNumbers{enable: false, background: RGB{r: 255, g: 255, b: 255}, foreground: RGB{r: 255, g: 255, b: 255}}}
+  }
+}
+
+
+#[derive(Debug,Clone,PartialEq)]
 pub struct FokEditConfig {
   colors: ColorConfig,
   elements: ElementsConfig,
   keybinds: Keybinds,
+  ops: FokEditOps,
   /*
   highlighting: HighlightingConfig,
   options: FokEditOpts,
@@ -187,7 +206,7 @@ pub struct FokEditConfig {
 }
 impl Default for FokEditConfig {
   fn default() -> Self {
-    Self {colors: ColorConfig{..Default::default()}, elements: ElementsConfig{..Default::default()}, keybinds: Keybinds{..Default::default()}}
+    Self {colors: ColorConfig{..Default::default()}, elements: ElementsConfig{..Default::default()}, keybinds: Keybinds{..Default::default()},  ops: FokEditOps{..Default::default()}}
   }
 }
 
@@ -303,7 +322,23 @@ impl Editor for Program {
     result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
     //let mut display_sl = 0 as u32;
     let free_y = tery-3;
-    let free_x = terx;
+
+    
+    let line_numbers = self.config.ops.line_numbers.enable;
+    let line_nums_background = self.config.ops.line_numbers.background.clone();
+    let line_nums_foreground = self.config.ops.line_numbers.foreground.clone();
+    
+    let mut free_x = terx;
+    if line_numbers {
+      let len = self.get_buffer().lines.len().to_string().len();
+      if len<4 {
+        free_x -= 4;
+      } else {
+        free_x -= len as u16 + 1;
+      }
+    }
+
+
     if self.get_buffer().cursor.1 > (free_y-1) as u32 + self.get_buffer().display_start_line {
 
       if ((free_y-1) as u32) < self.get_buffer().cursor.1 {
@@ -334,7 +369,20 @@ impl Editor for Program {
     if (self.get_buffer().lines.len() as u16) < (free_y + left as u16) {
       let rlen = self.get_buffer().lines.len();
       
+      let mut line = left;
       for i in &self.get_buffer().lines[left..rlen] {
+        if line_numbers {
+
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+
+
+          result += &vec![" "; (terx - free_x - line.to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
+          result += &line.to_string();
+          result += " ";
+
+          //reset color
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+        }
         if offset > 0 {
           if i.len()  > offset {
             let max = std::cmp::min(offset+free_x as usize, i.len());
@@ -349,6 +397,7 @@ impl Editor for Program {
             result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
           }
         }
+        line += 1;
       }
 
       let empty_line_color = self.config.colors.empty_line_color.clone();
@@ -356,6 +405,13 @@ impl Editor for Program {
 
       result += &format!("\x1b[38;2;{r};{g};{b}m", r=empty_line_color.r, g=empty_line_color.b, b=empty_line_color.b);
       for i in 0..(((free_y) as u16) - (rlen - left) as u16) {
+        if line_numbers {
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+          result += &vec![" "; (terx-free_x) as usize].into_iter().collect::<String>();
+
+          //reset color
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+        }
         result += &(empty_line_text.to_owned() + &vec![" "; free_x as usize - 1].into_iter().collect::<String>() + "\n");
       }
       result += "\x1b[38;2;255;255;255m";
@@ -363,7 +419,17 @@ impl Editor for Program {
     else {
 
       //let reallen = self.get_buffer().lines.len();
+      let mut line = left;
       for i in &self.get_buffer().lines[left..left+(free_y) as usize] {
+        if  line_numbers {
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+          result += &vec![" "; (terx - free_x - line.to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
+          result += &line.to_string();
+          result += " ";
+
+          //reset color 
+          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+        }
         if offset > 0 {
           if i.len()  > offset {
             let max = std::cmp::min(offset+free_x as usize, i.len());
@@ -378,6 +444,7 @@ impl Editor for Program {
             result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
           }
         }
+        line+=1;
       }
     }
       //if i.len()<free_x {
@@ -413,7 +480,7 @@ impl Editor for Program {
         result += &format!("\x1b[{tery};{column}H");
       },
       _ => {
-        let column = self.get_buffer().cursor.0+1 - self.get_buffer().display_offset_collumn;
+        let column = self.get_buffer().cursor.0+1 - self.get_buffer().display_offset_collumn + (terx-free_x) as u32;
         result += &format!("\x1b[{line};{column}H", line=self.get_buffer().cursor.1+2 - self.get_buffer().display_start_line);
       },
     };
