@@ -2,7 +2,7 @@ use crate::foklang::core::AST::{*};
 use crate::foklang::core::env::Environment;
 use crate::foklang::core::interpreter::Interpreter;
 
-use crate::{ColorConfig, Editor, FokEditConfig, Program, RGB};
+use crate::{ColorConfig, Editor, ElementsConfig, FokEditConfig, KeyEvent, Program, RGB};
 
 use std::{process::Command, env, str, fs, collections::HashMap}; // TEMPORARY SOLUTION
 
@@ -416,7 +416,35 @@ pub fn move_buffer(arguments: Arguments) -> Proventus {
   match arguments.function {
     FunctionArgs::singleProgram(by, program) => {
       let mut program = program;
-      program.current += match by.value {Fructa::Numerum(i) => i, _ => panic!("damn")} as usize;
+      match by.value {Fructa::Numerum(i) => {
+        if i>0 {
+          program.current += i as usize;
+        } else {
+          if i.abs() as usize >program.current {
+            program.current = (program.buffers.len() as i32 + i) as usize;
+          } else {
+            program.current -= i.abs() as usize;
+          }
+        }
+        program.current = program.current % program.buffers.len();
+        Proventus{value: Fructa::ProgramModifier(program), id: -5}
+      }, _ => panic!("?")}
+    }
+    _ => panic!("?")
+  }
+}
+
+pub fn set_buffer(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::singleProgram(by, program) => {
+      let mut program = program;
+      program.current = match by.value {Fructa::Numerum(i) => i, _ => panic!("damn")} as usize;
+
+      if program.current >= program.buffers.len() {
+        program.current = program.buffers.len() -1;
+      }
+
+      
       Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
     _ => panic!("?")
@@ -441,28 +469,162 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       let mut program = program;
       let mut color_config = ColorConfig {..Default::default()};
 
+      let mut elements_config = ElementsConfig {..Default::default()};
+
+      let mut keybinds = crate::Keybinds {..Default::default()};
+
+      let keybindsc = getw(config.clone(), "keybinds");
+
+      match keybindsc.value {
+        Fructa::Inventarii(i) => {
+          for keybind in i {
+            match keybind.value {
+              Fructa::Inventarii(i) => { //i.0 keyname  -  i.1 action
+                
+                if i.len() > 1 {
+                  let mut event = KeyEvent{code: crate::KeyCode::Escape, modifiers: vec![]};
+                  for key in combine_list_to_string(i[0].clone()).split("_") {
+                    match key {
+                      "ctrl" => {
+                        event.modifiers.push(crate::Modifier::Control);
+                      }, 
+                      "shift" => {
+                        event.modifiers.push(crate::Modifier::Shift);
+                      },
+                      "up" => {
+                        event.code = crate::KeyCode::Arrow(crate::Direction::Up);
+                      },
+                      "down" => {
+                        event.code = crate::KeyCode::Arrow(crate::Direction::Down);
+                      },
+                      "right" => {
+                        event.code = crate::KeyCode::Arrow(crate::Direction::Right);
+                      },
+                      "left" => {
+                        event.code = crate::KeyCode::Arrow(crate::Direction::Left);
+                      },
+                      _ => {
+                        event.code = crate::KeyCode::Char(key.chars().collect::<Vec<char>>()[0]);
+                      }
+                    }
+                  };
+                  keybinds.keybinds.push((event, combine_list_to_string(i[1].clone())));
+                }
+
+              },
+              _ => {}
+            }
+          }
+        }
+        _ => {}
+      }
+
+      let elements = getw(config.clone(), "elements");
+      match elements.value {
+        Fructa::Causor(_) => {
+
+          let debug = getw(elements.clone(), "debug");
+          match debug.value {
+            Fructa::Causor(_) => {
+              match getw(debug.clone(), "cursor").value {
+                Fructa::Condicio(b) => {
+                  elements_config.debug.cursor = b;
+                },
+                _ => {}
+              }
+            }
+            _ => {}
+          }
+
+          let empty_line = getw(elements.clone(), "empty_line");
+          match empty_line.value {
+            Fructa::Causor(_) => {
+              match getw(empty_line.clone(), "color").value {
+                Fructa::Inventarii(i) => {
+                  color_config.empty_line_color = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+              match getw(empty_line.clone(), "text").value {
+                Fructa::Inventarii(i) => {
+                  elements_config.empty_line.text = combine_list_to_string(getw(empty_line, "text"));
+                },
+                _ => {}
+              }
+            }
+            _ => {}
+          }
+        }
+        _ => {}
+      }
       let colors = getw(config, "colors");
-      match getw(colors.clone(), "background").value {
-        Fructa::Inventarii(i) => {
-          color_config.background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
-        },
-        _ => {}
-      }
-      match getw(colors.clone(), "foreground").value {
-        Fructa::Inventarii(i) => {
-          color_config.foreground = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
-        },
-        _ => {}
-      }
-      match getw(colors, "border").value {
-        Fructa::Inventarii(i) => {
-          color_config.border = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
-        },
-        _ => {}
+      match colors.value {
+        Fructa::Causor(_) => {
+          println!("{:#?}", getw(colors.clone(), "background").value);
+          match getw(colors.clone(), "background").value {
+            Fructa::Inventarii(i) => {
+              color_config.background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+            },
+            _ => {}
+          }
+          match getw(colors.clone(), "foreground").value {
+            Fructa::Inventarii(i) => {
+              color_config.foreground = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+            },
+            _ => {}
+          }
+          match getw(colors.clone(), "border").value {
+            Fructa::Inventarii(i) => {
+              color_config.border = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+            },
+            _ => {}
+          }
+          
+
+          let buffer = getw(colors.clone(), "buffer");
+          match buffer.value {
+            Fructa::Causor(_) => {
+              match getw(buffer.clone(), "active").value {
+                Fructa::Inventarii(i) => {
+                  color_config.active_buffer = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+              match getw(buffer, "inactive").value {
+                Fructa::Inventarii(i) => {
+                  color_config.inactive_buffer = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+            }
+            _ => {}
+          }
+
+          let io = getw(colors, "io");
+          match io.value {
+            Fructa::Causor(_) => {
+              match getw(io.clone(), "background").value {
+                Fructa::Inventarii(i) => {
+                  color_config.io_background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+              match getw(io, "foreground").value {
+                Fructa::Inventarii(i) => {
+                  color_config.io_foreground = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
+                },
+                _ => {}
+              }
+            }
+            _ => {}
+          }
+
+        }
+        _ => {},
       }
 
 
-      program.config = FokEditConfig{colors: color_config};
+      program.config = FokEditConfig{colors: color_config, elements: elements_config, keybinds};
       Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
     _ => panic!("?")
@@ -616,6 +778,8 @@ pub fn declare_builtins(env: &mut Environment) {
     ///PROGRAM
     (String::from("quit"), quit), (String::from("q"), quit), (String::from("exit"), quit),
     (String::from("write"), write), (String::from("w"), write), 
+    (String::from("movebuf"), move_buffer), (String::from("mb"), move_buffer),
+    (String::from("setbuf"), set_buffer), (String::from("b"), set_buffer),
   ];
   for i in functions {
     declare_fn(i.0, i.1, env);

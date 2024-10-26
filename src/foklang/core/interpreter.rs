@@ -1024,6 +1024,8 @@ impl Interpreter {
           } else {
             fargs = builtins::FunctionArgs::zerumProgram(program.clone());
           }
+        } else if f == builtins::load_fokedit_config || f == builtins::move_buffer || f == builtins::set_buffer {
+          fargs = builtins::FunctionArgs::singleProgram(self.evaluate(args_vec[0].clone(), env, program.clone()), program.clone());
         };
 
        if got>=expected {

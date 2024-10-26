@@ -62,17 +62,18 @@ fn get_terminal_size() -> Option<TerminalSize> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug,Clone,PartialEq)]
 pub struct KeyEvent {
   pub code: KeyCode,
   pub modifiers: Vec<Modifier>,
 }
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum Modifier {
   Control,
+  Shift,
   //why even do it at this point
 }
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum Direction {
   Up,
   Down,
@@ -80,7 +81,7 @@ pub enum Direction {
   Left
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum KeyCode {
   Escape,
   Colon,
@@ -99,6 +100,15 @@ const ENTER: char = '\n';
 fn getch() -> char {
   io::stdin().bytes().next().unwrap().unwrap() as char
 }
+fn get_arrow() -> KeyCode {
+  match getch() {'A' => KeyCode::Arrow(Direction::Up), 'B' => KeyCode::Arrow(Direction::Down), 'C' => KeyCode::Arrow(Direction::Right), 'D' => KeyCode::Arrow(Direction::Left),
+                                                           _ => KeyCode::Escape }
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct EmptyLine {
+  text: String,
+}
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct RGB {
@@ -107,21 +117,69 @@ pub struct RGB {
   b: u8,
 }
 
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct Keybinds {
+  keybinds: Vec<(KeyEvent,String)>,
+}
+
+impl Default for Keybinds {
+  fn default() -> Self {
+    Self {keybinds: vec![]}
+  }
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct DebugConfig {
+  cursor: bool,
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct ElementsConfig {
+  empty_line: EmptyLine,
+  debug: DebugConfig,
+}
+
+impl Default for ElementsConfig {
+  fn default() -> Self {
+    Self {
+      empty_line: EmptyLine{text: String::from("~")},
+      debug: DebugConfig{cursor: true},
+    }
+  }
+}
+
 #[derive(Debug,Clone,PartialEq)]
 pub struct ColorConfig {
   background: RGB,
   foreground: RGB,
   border: RGB,
+
+  empty_line_color: RGB,
+
+  active_buffer: RGB,
+  inactive_buffer: RGB,
+
+  io_background: RGB,
+  io_foreground: RGB,
 }
 impl Default for ColorConfig {
   fn default() -> Self {
-    Self {background: RGB{r: 0, g: 0, b: 0}, foreground: RGB{r: 0, g: 0, b: 0}, border: RGB{r: 0, g: 0, b: 0}}
+    /*Self {background: RGB{r: 65, g: 31, b: 86}, foreground: RGB{r: 255, g: 255, b: 255}, border: RGB{r: 40, g: 40, b: 40},
+          active_buffer: RGB{r: 75, g: 81, b: 66}, inactive_buffer: RGB{r: 46, g: 14, b: 79}, empty_line_color: RGB{r: 0, g: 0, b: 255},
+          io_background: RGB{r: 56, g: 68, b: 37}, io_foreground: RGB{r: 255, g: 255, b: 255}*/ 
+      Self {background: RGB{r: 255, g: 255, b: 255}, foreground: RGB{r: 255, g: 255, b: 255}, border: RGB{r: 255, g: 255, b: 255},
+          active_buffer: RGB{r: 255, g: 255, b: 255}, inactive_buffer: RGB{r: 255, g: 255, b: 255}, empty_line_color: RGB{r: 255, g: 255, b: 255},
+          io_background: RGB{r: 255, g: 255, b: 255}, io_foreground: RGB{r: 255, g: 255, b: 255}
+    }
   }
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct FokEditConfig {
   colors: ColorConfig,
+  elements: ElementsConfig,
+  keybinds: Keybinds,
   /*
   highlighting: HighlightingConfig,
   options: FokEditOpts,
@@ -129,7 +187,7 @@ pub struct FokEditConfig {
 }
 impl Default for FokEditConfig {
   fn default() -> Self {
-    Self {colors: ColorConfig{..Default::default()}}
+    Self {colors: ColorConfig{..Default::default()}, elements: ElementsConfig{..Default::default()}, keybinds: Keybinds{..Default::default()}}
   }
 }
 
@@ -211,9 +269,11 @@ impl Editor for Program {
     let max_buf_display_len = 16;
     for i in 0..self.buffers.len() {
       if i == self.current {
-        result+="\x1b[48;2;67;14;119m\x1b[1m";
+        let color_pack = self.config.colors.active_buffer.clone();
+        result+=&format!("\x1b[48;2;{r};{g};{b}m\x1b[1m", r=color_pack.r, g=color_pack.g, b=color_pack.b);
       } else {
-        result+="\x1b[48;2;46;14;79m\x1b[22m";
+        let color_pack = self.config.colors.inactive_buffer.clone();
+        result+=&format!("\x1b[48;2;{r};{g};{b}m\x1b[22m", r=color_pack.r, g=color_pack.g, b=color_pack.b);
       }
       
       let mut buf_name = self.buffers[i].buf_name.clone();
@@ -231,10 +291,16 @@ impl Editor for Program {
 
       result += &(vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).floor() as usize].into_iter().collect::<String>() + &buf_name + &vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).ceil() as usize].into_iter().collect::<String>());
     }
-    result += "\x1b[22m\x1b[48;2;65;31;86m";
+    
+    let border_color = self.config.colors.border.clone();
+    let background_color = self.config.colors.background.clone();
+
+    let foreground_color = self.config.colors.foreground.clone();
+
+    result += &format!("\x1b[22m\x1b[48;2;{r};{g};{b}m", r=border_color.r, g=border_color.g, b=border_color.b);
     result += &(vec![" "; terx as usize - self.buffers.len()*max_buf_display_len]).into_iter().collect::<String>();
     //result +=  "\x1b[0m";
-    result += "\x1b[48;2;44;22;58m";
+    result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
     //let mut display_sl = 0 as u32;
     let free_y = tery-3;
     let free_x = terx;
@@ -284,9 +350,13 @@ impl Editor for Program {
           }
         }
       }
-      result += "\x1b[38;2;5;8;191m";
+
+      let empty_line_color = self.config.colors.empty_line_color.clone();
+      let empty_line_text = self.config.elements.empty_line.text.clone();
+
+      result += &format!("\x1b[38;2;{r};{g};{b}m", r=empty_line_color.r, g=empty_line_color.b, b=empty_line_color.b);
       for i in 0..(((free_y) as u16) - (rlen - left) as u16) {
-        result += &("~".to_owned() + &vec![" "; free_x as usize - 1].into_iter().collect::<String>() + "\n");
+        result += &(empty_line_text.to_owned() + &vec![" "; free_x as usize - 1].into_iter().collect::<String>() + "\n");
       }
       result += "\x1b[38;2;255;255;255m";
     } 
@@ -314,8 +384,10 @@ impl Editor for Program {
       //    result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
       //  }
 
+    let io_background = self.config.colors.io_background.clone();
+    let io_foreground = self.config.colors.io_foreground.clone();
 
-    result += "\x1b[48;2;65;31;86m";
+    result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=io_background.r, g=io_background.g, b=io_background.b, r2=io_foreground.r, g2=io_foreground.g, b2=io_foreground.b);
     result += &(vec![" "; terx as usize]).into_iter().collect::<String>();
     result += "\n";
 
@@ -409,193 +481,215 @@ impl EditorBuffer {
 }
 fn handle_key_event(program: &mut Program, event: KeyEvent) {
   let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
-  match event.code {
-    KeyCode::Enter => {
-      match program.state {
-        State::Command => {
-          program.io = program.evaluate_io();
-          program.state = State::Control;
-        },
-        State::Input => {
-          let index = program.get_buffer().cursor.1;
-          let index2 = program.get_buffer().cursor.0;
-          let mut leftlist = program.get_buffer().lines[..index as usize].into_iter().map(|x| x.to_string()).collect::<Vec<String>>();
-          leftlist.push(program.get_buffer().lines[index as usize][..index2 as usize].to_string());
-          leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
-          leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
-          program.get_buffer().lines = leftlist;
-          program.move_cursor((-i16::MAX as i32, 1));
-        },
-        State::Control => {
-          program.move_cursor((-i16::MAX as i32, 1));
-        },
-      }
-    },
-    KeyCode::Escape => {
-      match program.state {
-        State::Command => {
-          program.state = State::Control;
-        },
-        State::Input => {
-          program.state = State::Control;
-        },
-        State::Control => {},
-      }
-    },
-    KeyCode::Delete => {
-      match program.state {
-        State::Command => {
-          let mut ioc = program.io.chars().collect::<Vec<char>>();
-          if ioc.len() > program.io_cursor as usize {
-            ioc.remove(program.io_cursor as usize);
-            program.io = ioc.into_iter().collect::<String>();
-          }
-        },
-        State::Control => {
-          let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
-          let x = program.get_buffer().cursor.0 as usize;
-          let ic = program.get_buffer().lines[index].clone();
-          let strc = ic[..x].chars();
-          let mut right = ic[x..].chars();
-          right.next();
-          program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
-        },
-        State::Input => {
+  let mut is_keybind = false;
+  for i in program.config.keybinds.keybinds.clone() {
+    if i.0 == event {
+      is_keybind = true;
+      let mut foklang = program.foklang.clone();
 
-        },
+      let panics = std::panic::catch_unwind(|| {
+        let (program,io) = foklang.run(i.1.clone(), program.clone()); // foklang.run returns display of returned value from foklang code
+        drop(foklang);
+        (program,io)
+      });
+      if panics.is_ok() {
+        let uw = panics.unwrap();
+        *program = uw.0;
+        program.io = uw.1
+      } else {
+        program.io = format!("Foklang panicked on keybind evaluation: {}.", i.1)
       }
-    },
-    KeyCode::Backspace => {
-      match program.state {
-        State::Command => {
-          let mut ioc = program.io.chars().collect::<Vec<char>>();
-          ioc.remove(program.io_cursor as usize -1);
-          program.io = ioc.into_iter().collect::<String>();
-          program.move_io_cursor(-1);
-          if program.io.len()==0 {
+    }
+  }
+  if !is_keybind {
+    match event.code {
+      KeyCode::Enter => {
+        match program.state {
+          State::Command => {
+            program.io = program.evaluate_io();
             program.state = State::Control;
-          }
-        },
-        State::Input => {
-          if program.get_buffer().cursor.0>0 {
-            let index = (program.get_buffer().cursor.1) as usize;
+          },
+          State::Input => {
+            let index = program.get_buffer().cursor.1;
+            let index2 = program.get_buffer().cursor.0;
+            let mut leftlist = program.get_buffer().lines[..index as usize].into_iter().map(|x| x.to_string()).collect::<Vec<String>>();
+            leftlist.push(program.get_buffer().lines[index as usize][..index2 as usize].to_string());
+            leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
+            leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
+            program.get_buffer().lines = leftlist;
+            program.move_cursor((-i16::MAX as i32, 1));
+          },
+          State::Control => {
+            program.move_cursor((-i16::MAX as i32, 1));
+          },
+        }
+      },
+      KeyCode::Escape => {
+        match program.state {
+          State::Command => {
+            program.state = State::Control;
+          },
+          State::Input => {
+            program.state = State::Control;
+          },
+          State::Control => {},
+        }
+      },
+      KeyCode::Delete => {
+        match program.state {
+          State::Command => {
+            let mut ioc = program.io.chars().collect::<Vec<char>>();
+            if ioc.len() > program.io_cursor as usize {
+              ioc.remove(program.io_cursor as usize);
+              program.io = ioc.into_iter().collect::<String>();
+            }
+          },
+          State::Control => {
+            let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
             let x = program.get_buffer().cursor.0 as usize;
-            let mut strc = program.get_buffer().lines[index][..x].chars();
-            strc.next_back();
-            program.get_buffer().lines[index] = strc.collect::<String>() + &program.get_buffer().lines[index][x..];
-            
-            program.move_cursor((-1,0));
-          } else if program.get_buffer().cursor.0 == 0 && program.get_buffer().cursor.1 > 0 {
-            let cursor = program.get_buffer().cursor.1;
-            let cline = program.get_buffer().lines[cursor as usize].clone();
-            program.get_buffer().lines[cursor as usize -1] += &cline;
-            program.get_buffer().lines.remove(cursor as usize);
-            let x = (program.get_buffer().lines[cursor as usize -1].len() - cline.len()) as i32;
-            program.move_cursor((x, -1));
-            if program.get_buffer().cursor.1 == program.get_buffer().lines.len() as u32 {
-              program.get_buffer().display_start_line -= 1;
-            }
-          }
-        },
-        State::Control => {
-          if program.get_buffer().cursor.0 == 0 && program.get_buffer().cursor.1 > 0 {
-            program.move_cursor((i16::MAX as i32, -1));
-          } else {
-            program.move_cursor((-1,0));
-          }
-        },
-      }
-    },
-    KeyCode::Colon => {
-      match program.state {
-        State::Command => {
-          program.io += ":";
-          program.move_io_cursor(1);
-          
-        },
-        State::Input => {
-          program.write_string(String::from(":"));
-        },
-        State::Control => {
-          program.state = State::Command;
-          program.io = String::from(":");
-          program.io_cursor = 1;
-        },
-      }
+            let ic = program.get_buffer().lines[index].clone();
+            let strc = ic[..x].chars();
+            let mut right = ic[x..].chars();
+            right.next();
+            program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
+          },
+          State::Input => {
 
-    },
-    KeyCode::Arrow(d) => {
-      match d {
-        Direction::Up => {
-          match program.state {
-            State::Command => {
-              if program.io_history_index+1 < program.io_history.len() {
-                program.io_history_index += 1;
-                program.io = program.io_history[program.io_history_index].clone();
-              } 
+          },
+        }
+      },
+      KeyCode::Backspace => {
+        match program.state {
+          State::Command => {
+            let mut ioc = program.io.chars().collect::<Vec<char>>();
+            ioc.remove(program.io_cursor as usize -1);
+            program.io = ioc.into_iter().collect::<String>();
+            program.move_io_cursor(-1);
+            if program.io.len()==0 {
+              program.state = State::Control;
             }
-            _ => {
-              program.move_cursor((0, -1));
-            }
-          }
-        },
-        Direction::Down => {
-          match program.state {
-            State::Command => {
-              if program.io_history_index-1 >= 0 {
-                program.io_history_index -= 1;
-                program.io = program.io_history[program.io_history_index].clone();
+          },
+          State::Input => {
+            if program.get_buffer().cursor.0>0 {
+              let index = (program.get_buffer().cursor.1) as usize;
+              let x = program.get_buffer().cursor.0 as usize;
+              let mut strc = program.get_buffer().lines[index][..x].chars();
+              strc.next_back();
+              program.get_buffer().lines[index] = strc.collect::<String>() + &program.get_buffer().lines[index][x..];
+            
+              program.move_cursor((-1,0));
+            } else if program.get_buffer().cursor.0 == 0 && program.get_buffer().cursor.1 > 0 {
+              let cursor = program.get_buffer().cursor.1;
+              let cline = program.get_buffer().lines[cursor as usize].clone();
+              program.get_buffer().lines[cursor as usize -1] += &cline;
+              program.get_buffer().lines.remove(cursor as usize);
+              let x = (program.get_buffer().lines[cursor as usize -1].len() - cline.len()) as i32;
+              program.move_cursor((x, -1));
+              if program.get_buffer().cursor.1 == program.get_buffer().lines.len() as u32 {
+                program.get_buffer().display_start_line -= 1;
               }
             }
-            _ => {
-              program.move_cursor((0, 1));
+          },
+          State::Control => {
+            if program.get_buffer().cursor.0 == 0 && program.get_buffer().cursor.1 > 0 {
+              program.move_cursor((i16::MAX as i32, -1));
+            } else {
+              program.move_cursor((-1,0));
             }
-          }
-        },
-        Direction::Left => {
-          match program.state {
-            State::Command => {
-              program.move_io_cursor(-1);
-            },
-            _ => {
-              program.move_cursor((-1, 0));
+          },
+        }
+      },
+      KeyCode::Colon => {
+        match program.state {
+          State::Command => {
+            program.io += ":";
+            program.move_io_cursor(1);
+          
+          },
+          State::Input => {
+            program.write_string(String::from(":"));
+          },
+          State::Control => {
+            program.state = State::Command;
+            program.io = String::from(":");
+            program.io_cursor = 1;
+          },
+        }
+
+      },
+      KeyCode::Arrow(d) => {
+        match d {
+          Direction::Up => {
+            match program.state {
+              State::Command => {
+                if program.io_history_index+1 < program.io_history.len() {
+                  program.io_history_index += 1;
+                  program.io = program.io_history[program.io_history_index].clone();
+                } 
+              }
+              _ => {
+                program.move_cursor((0, -1));
+              }
             }
-          }
-        },
-        Direction::Right => {
-          match program.state {
-            State::Command => {
-              program.move_io_cursor(1);
-            },
-            _ => {
-              program.move_cursor((1, 0));
+          },
+          Direction::Down => {
+            match program.state {
+              State::Command => {
+                if program.io_history_index-1 >= 0 { // what
+                  program.io_history_index -= 1;
+                  program.io = program.io_history[program.io_history_index].clone();
+                }
+              }
+              _ => {
+                program.move_cursor((0, 1));
+              }
             }
-          }
-        },
-      }
-    },
-    KeyCode::Char(c) => {
-      match program.state { 
-        State::Command => {
-          let left = (program.io[0..program.io_cursor as usize]).to_owned() + &c.to_string();
-          program.io = left + &program.io[program.io_cursor as usize..];
-          program.move_io_cursor(1);
-        },
-        State::Control => {
-          match c {
-            'i' => {program.state = State::Input;},
-            'a' => {program.state = State::Input;},
-            _ => {
-              //program.io = String::from("You're in Control Mode!");
-            },
-          }
-        },
-        State::Input => {
-          program.write_string(c.to_string());
-          program.move_cursor((1,0));
-        },
-      }
-    },
+          },
+          Direction::Left => {
+            match program.state {
+              State::Command => {
+                program.move_io_cursor(-1);
+              },
+              _ => {
+                program.move_cursor((-1, 0));
+              }
+            }
+          },
+          Direction::Right => {
+            match program.state {
+              State::Command => {
+                program.move_io_cursor(1);
+              },
+              _ => {
+                program.move_cursor((1, 0));
+              }
+            }
+          },
+        }
+      },
+      KeyCode::Char(c) => {
+        match program.state { 
+          State::Command => {
+            let left = (program.io[0..program.io_cursor as usize]).to_owned() + &c.to_string();
+            program.io = left + &program.io[program.io_cursor as usize..];
+            program.move_io_cursor(1);
+          },
+          State::Control => {
+            match c {
+              'i' => {program.state = State::Input;},
+              'a' => {program.state = State::Input;},
+              _ => {
+                //program.io = String::from("You're in Control Mode!");
+              },
+            }
+          },
+          State::Input => {
+            program.write_string(c.to_string());
+            program.move_cursor((1,0));
+          },
+        }
+      },
+    }
   }
 }
 
@@ -659,9 +753,12 @@ fn main() {
       }
     );
   }
-  if Path::new(&env::join_paths([Path::new(&env::home_dir().unwrap()), Path::new(".config/FokEdit/configuration.fok")].iter()).unwrap()).exists() {
-    let raw = program.foklang.raw_run(String::from("rgb r g b = [r g b];") 
-        + &fs::read_to_string(&env::join_paths([Path::new(&env::home_dir().unwrap()), Path::new(".config/FokEdit/configuration.fok")].iter()).unwrap()).unwrap(), program.clone());
+
+
+
+  if Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"))).exists() {
+    let raw = program.foklang.raw_run(String::from("rgb x y z = x:(y:[z]);") 
+        + &fs::read_to_string(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok")).unwrap(), program.clone());
     
     let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, program.clone()) });
 
@@ -694,8 +791,13 @@ fn main() {
       code: match c { BACKSPACE => KeyCode::Backspace, ':' => KeyCode::Colon, '\n' => KeyCode::Enter,
           '\u{1b}' => {
               match getch() { 
-                    '[' => match getch() {'A' => KeyCode::Arrow(Direction::Up), 'B' => KeyCode::Arrow(Direction::Down), 'C' => KeyCode::Arrow(Direction::Right), 'D' => KeyCode::Arrow(Direction::Left),
-                            _ => KeyCode::Escape }, 
+                    '[' => match getch() {
+                        'A' => KeyCode::Arrow(Direction::Up), 'B' => KeyCode::Arrow(Direction::Down), 'C' => KeyCode::Arrow(Direction::Right), 'D' => KeyCode::Arrow(Direction::Left),
+                        '1' => match getch() {
+                                ';' => match getch() 
+                                { '5' => {modifiers.push(Modifier::Control); get_arrow()}, '2' => {modifiers.push(Modifier::Shift); get_arrow()}, _ => KeyCode::Escape}, _ => KeyCode::Escape
+                            },
+                        _ => KeyCode::Escape }, 
                     _ => KeyCode::Escape}},
           _ => KeyCode::Char(c)},
       modifiers,
