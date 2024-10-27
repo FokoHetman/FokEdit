@@ -864,6 +864,10 @@ fn main() {
                                 ';' => match getch() 
                                 { '5' => {modifiers.push(Modifier::Control); get_arrow()}, '2' => {modifiers.push(Modifier::Shift); get_arrow()}, _ => KeyCode::Escape}, _ => KeyCode::Escape
                             },
+                        '3' => match getch() {
+                              '~' => KeyCode::Delete,
+                              _ => KeyCode::Escape,
+                            },
                         _ => KeyCode::Escape }, 
                     _ => KeyCode::Escape}},
           _ => KeyCode::Char(c)},
