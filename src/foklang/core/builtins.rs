@@ -2,7 +2,7 @@ use crate::foklang::core::AST::{*};
 use crate::foklang::core::env::Environment;
 use crate::foklang::core::interpreter::Interpreter;
 
-use crate::{ColorConfig, Editor, ElementsConfig, FokEditConfig, KeyEvent, Program, RGB};
+use crate::{ColorConfig, Editor, ElementsConfig, FokEditConfig, KeyEvent, Program, State, RGB};
 
 use std::{process::Command, env, str, fs, collections::HashMap}; // TEMPORARY SOLUTION
 
@@ -480,40 +480,49 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
 
       match keybindsc.value {
         Fructa::Inventarii(i) => {
-          for keybind in i {
+          for keybind in i.clone() {
             match keybind.value {
-              Fructa::Inventarii(i) => { //i.0 keyname  -  i.1 action
+              Fructa::Causor(_) => { //i.0 keyname  -  i.1 action
                 
-                if i.len() > 1 {
-                  let mut event = KeyEvent{code: crate::KeyCode::Escape, modifiers: vec![]};
-                  for key in combine_list_to_string(i[0].clone()).split("_") {
-                    match key {
-                      "ctrl" => {
-                        event.modifiers.push(crate::Modifier::Control);
-                      }, 
-                      "shift" => {
-                        event.modifiers.push(crate::Modifier::Shift);
-                      },
-                      "up" => {
-                        event.code = crate::KeyCode::Arrow(crate::Direction::Up);
-                      },
-                      "down" => {
-                        event.code = crate::KeyCode::Arrow(crate::Direction::Down);
-                      },
-                      "right" => {
-                        event.code = crate::KeyCode::Arrow(crate::Direction::Right);
-                      },
-                      "left" => {
-                        event.code = crate::KeyCode::Arrow(crate::Direction::Left);
-                      },
-                      _ => {
-                        event.code = crate::KeyCode::Char(key.chars().collect::<Vec<char>>()[0]);
+                let mut event = KeyEvent{code: crate::KeyCode::Escape, modifiers: vec![]};
+                let key = getw(keybind.clone(), "key");
+                match key.clone().value {
+                  Fructa::Inventarii(i) => {
+                    
+                    for key in combine_list_to_string(key.clone()).split("_") {
+                      match key {
+                        "ctrl" => {
+                          event.modifiers.push(crate::Modifier::Control);
+                        }, 
+                        "shift" => {
+                          event.modifiers.push(crate::Modifier::Shift);
+                        },
+                        "up" => {
+                          event.code = crate::KeyCode::Arrow(crate::Direction::Up);
+                        },
+                        "down" => {
+                          event.code = crate::KeyCode::Arrow(crate::Direction::Down);
+                        },
+                        "right" => {
+                         event.code = crate::KeyCode::Arrow(crate::Direction::Right);
+                        },
+                        "left" => {
+                          event.code = crate::KeyCode::Arrow(crate::Direction::Left);
+                        },
+                        _ => {
+                          event.code = crate::KeyCode::Char(key.chars().collect::<Vec<char>>()[0]);
+                        }
                       }
-                    }
-                  };
-                  keybinds.keybinds.push((event, combine_list_to_string(i[1].clone())));
+                    };
+                  }
+                  _ => {}
                 }
-
+                let bol_fizyczny = match getw(keybind.clone(), "override").value {
+                    Fructa::Condicio(b) => b,
+                    _ => true,
+                };
+                
+                keybinds.keybinds.push((event, combine_list_to_string(getw(keybind, "action")), bol_fizyczny));
               },
               _ => {}
             }
@@ -595,7 +604,7 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       let colors = getw(config, "colors");
       match colors.value {
         Fructa::Causor(_) => {
-          println!("{:#?}", getw(colors.clone(), "background").value);
+          //println!("{:#?}", getw(colors.clone(), "background").value);
           match getw(colors.clone(), "background").value {
             Fructa::Inventarii(i) => {
               color_config.background = RGB{r: uwInt(i[0].clone()) as u8, g: uwInt(i[1].clone()) as u8, b: uwInt(i[2].clone()) as u8};
@@ -663,6 +672,19 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
     _ => panic!("?")
+  }
+}
+
+pub fn select(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::zerumProgram(program) => {
+      let mut program = program;
+      program.state = State::Selection;
+      let c = program.get_buffer().cursor;
+      program.get_buffer().selection = (c,c);
+      Proventus{value: Fructa::ProgramModifier(program), id: -5}
+    }
+    _ => panic!("??")
   }
 }
 
@@ -809,6 +831,7 @@ pub fn declare_builtins(env: &mut Environment) {
     (String::from("tail"), tail), (String::from("replace"), replace), (String::from("split"), split), (String::from("toInt"), to_int),
     (String::from("toString"), to_string), (String::from("globals"), globals), (String::from("read_file"), read_file), (String::from("load_file"), load_file),
     (String::from("load_string"), load_string), (String::from("env"), envf), (String::from("exec"), exec),
+    (String::from("select"), select),
 
     ///PROGRAM
     (String::from("quit"), quit), (String::from("q"), quit), (String::from("exit"), quit),

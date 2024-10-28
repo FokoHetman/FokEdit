@@ -1,6 +1,6 @@
 #![allow(unused_doc_comments)]
 mod foklang;
-use {libc, std::{
+use {foklang::core::builtins::println, libc, std::{
   env, fs, io::{self, IsTerminal, Read, Write}, path::Path, sync::Mutex
 }};
 
@@ -120,7 +120,7 @@ pub struct RGB {
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Keybinds {
-  keybinds: Vec<(KeyEvent,String)>,
+  keybinds: Vec<(KeyEvent,String,bool)>,
 }
 
 impl Default for Keybinds {
@@ -218,6 +218,7 @@ enum BufferType {
 #[derive(Debug,Clone,PartialEq)]
 struct EditorBuffer {
   cursor: (u32, u32),
+  selection: ((u32, u32), (u32, u32)), // (start_loc, end_loc)
   lines: Vec<String>,
   display_start_line: u32,
   display_offset_collumn: u32,
@@ -230,6 +231,7 @@ enum State {
   Control,
   Command,
   Input,
+  Selection,
 }
 
 #[derive(Debug,Clone,PartialEq)]
@@ -253,6 +255,7 @@ trait Editor {
   fn clear(&mut self);
   fn get_buffer(&mut self) -> &mut EditorBuffer;
   fn move_cursor(&mut self, vector: (i32, i32));
+  fn move_selection(&mut self, vector: (i32, i32));
   fn move_io_cursor(&mut self, vector: i32);
   fn write_string(&mut self, string: String);
 
@@ -366,6 +369,10 @@ impl Editor for Program {
     let left = self.get_buffer().display_start_line as usize;
 
     let offset = self.get_buffer().display_offset_collumn as usize;
+    
+    let show_selection = false;//self.state == State::Selection;
+    let selection = self.get_buffer().selection;
+
     if (self.get_buffer().lines.len() as u16) < (free_y + left as u16) {
       let rlen = self.get_buffer().lines.len();
       
@@ -386,7 +393,24 @@ impl Editor for Program {
         if offset > 0 {
           if i.len()  > offset {
             let max = std::cmp::min(offset+free_x as usize, i.len());
-            result += &(i.to_owned()[offset..max].to_owned() + &vec![" "; free_x as usize - (max-offset)].into_iter().collect::<String>() + "\n");
+            if show_selection {
+              if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
+                result += "\x1b[48;2;255;0;0m";
+              } else if selection.0.1 == line as u32 {
+                //hi dumbass please implement that in near future
+              } else if selection.1.1 == line as u32 {
+
+              }
+            }
+
+            result += &(i.to_owned()[offset..max].to_owned());
+
+            if show_selection {
+              result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+            }
+
+            result += &(vec![" "; free_x as usize - (max-offset)].into_iter().collect::<String>() + "\n");
+
           } else {
             result += &(vec![" "; free_x as usize ].into_iter().collect::<String>() + "\n");
           }
@@ -473,6 +497,7 @@ impl Editor for Program {
       State::Input => "1",
       State::Control => "0",
       State::Command => "2",
+      State::Selection => "3",
     };
     match self.state {
       State::Command => {
@@ -493,6 +518,35 @@ impl Editor for Program {
   fn get_buffer(&mut self) -> &mut EditorBuffer {
     return &mut self.buffers[self.current]
   }
+
+  fn move_selection(&mut self, vector: (i32, i32)) {
+    let mut n0 = self.get_buffer().selection.1.0 as i32 + vector.0;
+    let mut n1 = self.get_buffer().selection.1.1 as i32 + vector.1;
+
+    if n1<0 {
+      n1 = 0;
+    } else if n1 >= self.get_buffer().lines.len() as i32 {
+      n1 = self.get_buffer().lines.len() as i32 -1;
+    }
+    if vector.1 != 0 {
+      if n0 > self.get_buffer().lines[n1 as usize].len() as i32  {
+        n0 = self.get_buffer().lines[n1 as usize].len() as i32;
+      }
+    }
+
+    let y = n1 as usize;
+    let line_len = self.get_buffer().lines[y].len() as i32;
+    if n0 < 0 {
+      n0 = 0;
+    } else if n0 > line_len {
+      n0 = line_len;
+    }
+
+    self.get_buffer().selection.1.0 = n0 as u32;
+    self.get_buffer().selection.1.1 = n1 as u32;
+   
+  }
+
   fn move_cursor(&mut self, vector: (i32, i32)) {
     let mut n0 = self.get_buffer().cursor.0 as i32 + vector.0;
     let mut n1 = self.get_buffer().cursor.1 as i32 + vector.1;
@@ -517,7 +571,7 @@ impl Editor for Program {
     }
 
     self.get_buffer().cursor.0 = n0 as u32;
-     self.get_buffer().cursor.1 = n1 as u32;
+    self.get_buffer().cursor.1 = n1 as u32;
    
   }
   fn move_io_cursor(&mut self, vector: i32) {
@@ -548,10 +602,10 @@ impl EditorBuffer {
 }
 fn handle_key_event(program: &mut Program, event: KeyEvent) {
   let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
-  let mut is_keybind = false;
+  let mut overridek = false;
   for i in program.config.keybinds.keybinds.clone() {
     if i.0 == event {
-      is_keybind = true;
+      overridek = i.2;
       let mut foklang = program.foklang.clone();
 
       let panics = std::panic::catch_unwind(|| {
@@ -568,7 +622,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
       }
     }
   }
-  if !is_keybind {
+  if !overridek {
     match event.code {
       KeyCode::Enter => {
         match program.state {
@@ -584,10 +638,14 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
             leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
             program.get_buffer().lines = leftlist;
-            program.move_cursor((-i16::MAX as i32, 1));
+            program.move_cursor((0, 1));
           },
           State::Control => {
-            program.move_cursor((-i16::MAX as i32, 1));
+            program.move_cursor((0, 1));
+          },
+          State::Selection => {
+            program.move_cursor((0, 1)); // move selection also pls
+            program.move_selection((0,1));
           },
         }
       },
@@ -600,6 +658,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.state = State::Control;
           },
           State::Control => {},
+          State::Selection => {
+            program.get_buffer().selection = ((0,0),(0,0));
+            program.state = State::Control;
+          },
         }
       },
       KeyCode::Delete => {
@@ -622,6 +684,30 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
           },
           State::Input => {
 
+          },
+          State::Selection => {
+            let selection = program.get_buffer().selection;
+
+            if selection.0.1 == selection.1.1 {
+              for i in (selection.0.0 as usize .. selection.1.0 as usize).rev() {
+                program.get_buffer().lines[selection.0.1 as usize].remove(i);
+              }
+            } else {
+              println!("a");
+              for i in (selection.0.0 as usize .. program.get_buffer().lines[selection.0.1 as usize].len()-1).rev() {
+                program.get_buffer().lines[selection.0.1 as usize].remove(i);
+              }
+              println!("b");
+
+              for i in (( selection.0.1+1 ) as usize .. ( selection.1.1-1) as usize).rev() {
+                program.get_buffer().lines.remove(i);
+              }
+
+              for i in (0 .. program.get_buffer().lines[selection.1.1 as usize].len()-1).rev() {
+                program.get_buffer().lines[selection.0.1 as usize].remove(i);
+              }
+            }
+            program.state = State::Control;
           },
         }
       },
@@ -664,6 +750,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
               program.move_cursor((-1,0));
             }
           },
+          State::Selection => {},
         }
       },
       KeyCode::Colon => {
@@ -681,6 +768,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.io = String::from(":");
             program.io_cursor = 1;
           },
+          State::Selection => {},
         }
 
       },
@@ -693,7 +781,11 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                   program.io_history_index += 1;
                   program.io = program.io_history[program.io_history_index].clone();
                 } 
-              }
+              },
+              State::Selection => {
+                program.move_cursor((0, -1));
+                program.move_selection((0,-1));
+              },
               _ => {
                 program.move_cursor((0, -1));
               }
@@ -707,6 +799,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                   program.io = program.io_history[program.io_history_index].clone();
                 }
               }
+              State::Selection => {
+                program.move_cursor((0, 1));
+                program.move_selection((0,1));
+              },
               _ => {
                 program.move_cursor((0, 1));
               }
@@ -717,6 +813,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
               State::Command => {
                 program.move_io_cursor(-1);
               },
+              State::Selection => {
+                program.move_cursor((-1, 0));
+                program.move_selection((-1, 0));
+              },
               _ => {
                 program.move_cursor((-1, 0));
               }
@@ -726,6 +826,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             match program.state {
               State::Command => {
                 program.move_io_cursor(1);
+              },
+              State::Selection => {
+                program.move_cursor((1, 0));
+                program.move_selection((1, 0));
               },
               _ => {
                 program.move_cursor((1, 0));
@@ -754,6 +858,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.write_string(c.to_string());
             program.move_cursor((1,0));
           },
+          State::Selection => {},
         }
       },
     }
@@ -785,6 +890,7 @@ fn main() {
       program.buffers.push(
         EditorBuffer {
           cursor: (0, 0),
+          selection: ((0,0), (0,0)),
           lines: fs::read_to_string(i.clone()).unwrap().split("\n").collect::<Vec<&str>>().into_iter().map(|x| String::from(x)).collect::<Vec<String>>(),
           buf_type: BufferType::File,
           display_start_line: 0,
@@ -797,6 +903,7 @@ fn main() {
       program.buffers.push(
         EditorBuffer {
           cursor: (0, 0),
+          selection: ((0,0), (0,0)),
           lines: vec![String::new()],
           buf_type: BufferType::File,
           display_start_line: 0,
@@ -811,6 +918,7 @@ fn main() {
     program.buffers.push(
       EditorBuffer {
         cursor:  (0, 0),
+        selection: ((0,0), (0,0)),
         lines: vec![String::new()],
         buf_type: BufferType::File,
         display_start_line: 0,

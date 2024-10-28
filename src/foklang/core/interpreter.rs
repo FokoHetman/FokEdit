@@ -1016,7 +1016,7 @@ impl Interpreter {
           expected = 1;
         }
 
-        else if f == builtins::quit {
+        else if f == builtins::quit || f == builtins::select {
           fargs = builtins::FunctionArgs::zerumProgram(program.clone());
         } else if f == builtins::write {
           if args_vec.len()>=1 {
