@@ -1,0 +1,58 @@
+{
+  colors = {
+    background = rgb 40 40 40;
+    foreground = rgb 255 255 255;
+    border = rgb 78 86 65;#!182 185 38;
+    
+    buffer = {
+      inactive = rgb 75 91 86;
+      active = rgb 116 142 74;
+    };
+
+    io = {
+      background = rgb 32 32 32;#!98 109 81;
+      foreground = rgb 154 211 63;
+    };
+
+  };
+
+  elements = {
+    empty_line = {
+      color = rgb 0 0 150;
+      text = "";
+    };
+    debug = {
+      cursor = true;
+    };
+  };
+
+  highlighting = {
+    functions = rgb 182 185 38;
+    keywords = rgb 15 140 75;
+  };
+  ops = {
+    autocompletion = true;
+    line_numbers = {
+      enable = true;
+      foreground = rgb 120 120 120;
+      background = rgb 40 40 40;
+    };
+  };
+
+  keybinds = [ #! example: ctrl_left --> ctrl + left_arrow combination #! due to budget you are not able to do stuff like ctrl_shift_left etc.;
+    {
+      key = "ctrl_left";
+      action = "mb (0-1)";
+      override = true;
+    }
+    {
+      key = "ctrl_right";
+      action = "mb 1";
+      override = true;
+    }
+    {key="shift_right"; action="select";override=false;}
+    {key="shift_left"; action="select";override=false;}
+    {key="shift_up"; action="select";override=false;}
+    {key="shift_down"; action="select";override=false;}
+  ];
+}
