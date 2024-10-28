@@ -1,6 +1,7 @@
 # FokEdit
 
 ## [pl_PL]
+### status: niedokończony
 Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 
 ## Cel:
