@@ -14,6 +14,10 @@
       foreground = rgb 154 211 63;
     };
 
+    select = {
+      background = rgb 86 127 70;
+    };
+
   };
 
   elements = {
@@ -44,15 +48,17 @@
       key = "ctrl_left";
       action = "mb (0-1)";
       override = true;
+      states = [states.control states.select];
     }
     {
       key = "ctrl_right";
       action = "mb 1";
       override = true;
+      states = [states.control states.select];
     }
-    {key="shift_right"; action="select";override=false;}
-    {key="shift_left"; action="select";override=false;}
-    {key="shift_up"; action="select";override=false;}
-    {key="shift_down"; action="select";override=false;}
+    {key="shift_right"; action="select";override=false;states=states.all;}
+    {key="shift_left"; action="select";override=false;states=states.all;}
+    {key="shift_up"; action="select";override=false;states=states.all;}
+    {key="shift_down"; action="select";override=false;states=states.all;}
   ];
 }

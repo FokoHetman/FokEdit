@@ -522,7 +522,32 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
                     _ => true,
                 };
                 
-                keybinds.keybinds.push((event, combine_list_to_string(getw(keybind, "action")), bol_fizyczny));
+                let mut states: Vec<State> = vec![];
+                let statesl = getw(keybind.clone(), "states");
+                match statesl.value {
+                  Fructa::Inventarii(l) => {
+                    for i in l {
+                      match uwInt(i) {
+                        0 => {
+                          states.push(State::Control);
+                        }
+                        1 => {
+                          states.push(State::Command);
+                        }
+                        2 => {
+                          states.push(State::Input);
+                        }
+                        3 => {
+                          states.push(State::Selection);
+                        }
+                        _ => {}
+                      }
+                    }
+                  }
+                  _ => {}
+                }
+
+                keybinds.keybinds.push((event, combine_list_to_string(getw(keybind, "action")), bol_fizyczny, states));
               },
               _ => {}
             }

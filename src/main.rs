@@ -1,6 +1,6 @@
 #![allow(unused_doc_comments)]
 mod foklang;
-use {foklang::core::builtins::println, libc, std::{
+use {libc, std::{
   env, fs, io::{self, IsTerminal, Read, Write}, path::Path, sync::Mutex
 }};
 
@@ -120,7 +120,7 @@ pub struct RGB {
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Keybinds {
-  keybinds: Vec<(KeyEvent,String,bool)>,
+  keybinds: Vec<(KeyEvent,String,bool,Vec<State>)>,
 }
 
 impl Default for Keybinds {
@@ -262,6 +262,7 @@ trait Editor {
 }
 impl Editor for Program {
   fn evaluate_io(&mut self) -> String {
+    self.io_history.push(self.io.clone());
     let mut ch = self.io.chars();
     ch.next();
 
@@ -370,8 +371,21 @@ impl Editor for Program {
 
     let offset = self.get_buffer().display_offset_collumn as usize;
     
-    let show_selection = false;//self.state == State::Selection;
-    let selection = self.get_buffer().selection;
+    let show_selection = self.state == State::Selection;
+    let mut selection = self.get_buffer().selection;
+
+    if selection.1.1 < selection.0.1 {
+      let s0 = selection.0;
+      selection.0.1 = selection.1.1;
+      selection.0.0 = selection.1.0;
+      selection.1.1 = s0.1;
+      selection.1.0 = s0.0;
+    }
+    if selection.0.1 == selection.1.1 && selection.0.0 > selection.1.0 {
+      let s10 = selection.1.0;
+      selection.1.0 = selection.0.0;
+      selection.0.0 = s10;
+    }
 
     if (self.get_buffer().lines.len() as u16) < (free_y + left as u16) {
       let rlen = self.get_buffer().lines.len();
@@ -383,8 +397,8 @@ impl Editor for Program {
           result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
 
 
-          result += &vec![" "; (terx - free_x - line.to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
-          result += &line.to_string();
+          result += &vec![" "; (terx - free_x - (line+1).to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
+          result += &(line+1).to_string();
           result += " ";
 
           //reset color
@@ -393,21 +407,39 @@ impl Editor for Program {
         if offset > 0 {
           if i.len()  > offset {
             let max = std::cmp::min(offset+free_x as usize, i.len());
-            if show_selection {
+            if show_selection && line >= selection.0.1 as usize && line <= selection.1.1 as usize {
+              let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
+                                 (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
               if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
                 result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[offset..max].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+              } else if selection.0.1 == selection.1.1 && line == selection.0.1 as usize {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0 as usize..max].to_owned());
+              
               } else if selection.0.1 == line as u32 {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..max].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
                 //hi dumbass please implement that in near future
               } else if selection.1.1 == line as u32 {
-
+                result += "\x1b[38;2;255;0;0m";
+                result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0..max].to_owned());
               }
+            } else {
+
+              result += &(i.to_owned()[offset..max].to_owned());
             }
-
-            result += &(i.to_owned()[offset..max].to_owned());
-
-            if show_selection {
+            /*if show_selection {
               result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
-            }
+            }*/
 
             result += &(vec![" "; free_x as usize - (max-offset)].into_iter().collect::<String>() + "\n");
 
@@ -416,9 +448,66 @@ impl Editor for Program {
           }
         } else {
           if i.len() <= free_x as usize {
-            result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+            if show_selection && line >= selection.0.1 as usize && line <= selection.1.1 as usize {
+              let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
+                                 (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
+              if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
+                result += "\x1b[48;2;255;0;0m";
+                result += &i.to_owned();
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+              } else if selection.0.1 == selection.1.1 && line==selection.0.1 as usize {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0 as usize].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0..i.len()].to_owned());
+              } else if selection.0.1 == line as u32 {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..i.len()].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+              } else if selection.1.1 == line as u32 {
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0..i.len()].to_owned());
+              }
+              result += &(vec![" "; free_x as usize - (i.len()-offset)].into_iter().collect::<String>() + "\n");
+            } else {
+              result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+            }
           } else {
-            result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
+            if show_selection && line >= selection.0.1 as usize && line <= selection.1.1 as usize {
+              let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
+                                 (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
+              if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
+                result += "\x1b[48;2;255;0;0m";
+                result += &i.to_owned();
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+              } else if selection.0.1 == selection.1.1 && line==selection.0.1 as usize {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0..free_x as usize].to_owned());
+              } else if selection.0.1 == line as u32 {
+                result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[selectionmin.0.0..free_x as usize].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+              } else if selection.1.1 == line as u32 {
+                result += "\x1b[48;2;255;0;0m";
+                result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
+                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &(i.to_owned()[selectionmin.1.0..free_x as usize].to_owned());
+              }
+              result += "\n";
+              //result += &(vec![" "; free_x as usize - (i.len()-offset)].into_iter().collect::<String>() + "\n");
+            } else {
+              result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
+            }
           }
         }
         line += 1;
@@ -447,8 +536,8 @@ impl Editor for Program {
       for i in &self.get_buffer().lines[left..left+(free_y) as usize] {
         if  line_numbers {
           result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
-          result += &vec![" "; (terx - free_x - line.to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
-          result += &line.to_string();
+          result += &vec![" "; (terx - free_x - (line+1).to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
+          result += &(line+1).to_string();
           result += " ";
 
           //reset color 
@@ -604,7 +693,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
   let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
   let mut overridek = false;
   for i in program.config.keybinds.keybinds.clone() {
-    if i.0 == event {
+    if i.0 == event && i.3.contains(&program.state) {
       overridek = i.2;
       let mut foklang = program.foklang.clone();
 
@@ -686,7 +775,21 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
 
           },
           State::Selection => {
-            let selection = program.get_buffer().selection;
+            let mut selection = program.get_buffer().selection;
+
+            if selection.1.1 < selection.0.1 {
+              let s0 = selection.0;
+              selection.0.1 = selection.1.1;
+              selection.0.0 = selection.1.0;
+              selection.1.1 = s0.1;
+              selection.1.0 = s0.0;
+            }
+            if selection.0.1 == selection.1.1 && selection.0.0 > selection.1.0 {
+              let s10 = selection.1.0;
+              selection.1.0 = selection.0.0;
+              selection.0.0 = s10;
+            }
+
 
             if selection.0.1 == selection.1.1 {
               for i in (selection.0.0 as usize .. selection.1.0 as usize).rev() {
@@ -694,18 +797,28 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
               }
             } else {
               println!("a");
-              for i in (selection.0.0 as usize .. program.get_buffer().lines[selection.0.1 as usize].len()-1).rev() {
+              for i in (selection.0.0 as usize .. program.get_buffer().lines[selection.0.1 as usize].len()).rev() {
                 program.get_buffer().lines[selection.0.1 as usize].remove(i);
               }
               println!("b");
 
+              let mut removed = 0;
               for i in (( selection.0.1+1 ) as usize .. ( selection.1.1-1) as usize).rev() {
                 program.get_buffer().lines.remove(i);
+                removed+=1;
               }
+              println!("c");
 
-              for i in (0 .. program.get_buffer().lines[selection.1.1 as usize].len()-1).rev() {
-                program.get_buffer().lines[selection.0.1 as usize].remove(i);
+              
+              for i in (0 .. selection.1.0 as usize-removed).rev() {
+                println!("{}", i, );
+                program.get_buffer().lines[selection.1.1 as usize - removed].remove(i);
+                
               }
+              let lastline = &program.get_buffer().lines[selection.1.1 as usize - removed].clone();
+              program.get_buffer().lines[selection.0.1 as usize] += lastline;
+              program.get_buffer().lines.remove(selection.1.1 as usize -removed);
+              program.get_buffer().cursor = selection.0;
             }
             program.state = State::Control;
           },
@@ -714,11 +827,15 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
       KeyCode::Backspace => {
         match program.state {
           State::Command => {
-            let mut ioc = program.io.chars().collect::<Vec<char>>();
-            ioc.remove(program.io_cursor as usize -1);
-            program.io = ioc.into_iter().collect::<String>();
-            program.move_io_cursor(-1);
-            if program.io.len()==0 {
+            if program.io_cursor > 1 {
+              let mut ioc = program.io.chars().collect::<Vec<char>>();
+              ioc.remove(program.io_cursor as usize -1);
+              program.io = ioc.into_iter().collect::<String>();
+              program.move_io_cursor(-1);
+              if program.io.len()==0 { // not needed (?)
+                program.state = State::Control;
+              }
+            } else {
               program.state = State::Control;
             }
           },
@@ -750,7 +867,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
               program.move_cursor((-1,0));
             }
           },
-          State::Selection => {},
+          State::Selection => {
+            program.move_cursor((-1,0));
+            program.move_selection((-1,0));
+          },
         }
       },
       KeyCode::Colon => {
@@ -768,7 +888,11 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.io = String::from(":");
             program.io_cursor = 1;
           },
-          State::Selection => {},
+          State::Selection => {
+            program.state = State::Command;
+            program.io = String::from(":");
+            program.io_cursor = 1;
+          },
         }
 
       },
@@ -777,10 +901,15 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
           Direction::Up => {
             match program.state {
               State::Command => {
-                if program.io_history_index+1 < program.io_history.len() {
+                if program.io_history_index < program.io_history.len() {
                   program.io_history_index += 1;
-                  program.io = program.io_history[program.io_history_index].clone();
-                } 
+                } else {
+                  program.io_history_index = 1;
+                }
+                if program.io_history.len() > 0 {
+                  program.io = program.io_history[program.io_history_index-1].clone();
+                  program.io_cursor = program.io_history[program.io_history_index-1].clone().len() as u32;
+                }
               },
               State::Selection => {
                 program.move_cursor((0, -1));
@@ -794,9 +923,15 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
           Direction::Down => {
             match program.state {
               State::Command => {
-                if program.io_history_index-1 >= 0 { // what
-                  program.io_history_index -= 1;
-                  program.io = program.io_history[program.io_history_index].clone();
+                if program.io_history.len()>0 {
+                  if program.io_history_index > 0 { // what
+                    program.io = program.io_history[program.io_history_index-1].clone();
+                    program.io_cursor = program.io_history[program.io_history_index-1].clone().len() as u32;
+                    program.io_history_index -= 1;
+                  } else {
+                    program.io = String::from(":");
+                    program.io_cursor = 1;
+                  }
                 }
               }
               State::Selection => {
@@ -932,7 +1067,7 @@ fn main() {
 
 
   if Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"))).exists() {
-    let raw = program.foklang.raw_run(String::from("rgb x y z = x:(y:[z]);") 
+    let raw = program.foklang.raw_run(String::from("rgb x y z = x:(y:[z]); states = {control=0; command=1; input=2; select=3; all=[0..3]};") 
         + &fs::read_to_string(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok")).unwrap(), program.clone());
     
     let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, program.clone()) });
