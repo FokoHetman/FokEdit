@@ -210,10 +210,62 @@ impl Default for FokEditConfig {
   }
 }
 
+
+
+#[derive(Debug,Clone,PartialEq)]
+struct Subdir {
+  name: String,
+  abs_path: String,
+  selected: bool,
+}
+
+
+const SELECTED_COLOR: i32 = 178;
+const INACTIVE_COLOR: i32 = 253; // make non-hardcoded
+
+#[derive(Debug,Clone,PartialEq)]
+struct Provider {
+  subdirs: Vec<Subdir>,
+  selected_index: usize,
+  exit: bool,
+}
+trait ProviderFn {
+  fn getlines(&mut self) -> Vec<String>;
+}
+impl ProviderFn for Provider{
+  fn getlines(&mut self) -> Vec<String> {
+    let mut max = 0;
+    for i in self.clone().subdirs {
+      if max<i.name.len() {
+        max = i.name.len();
+      }
+    }
+    max*=2;
+    /*print!("{esc}[0G", esc = 27 as char);
+    print!("{esc}[2K", esc = 27 as char);
+    for i in 0..self.subdirs.len() {
+      print!("{esc}[1A", esc = 27 as char);
+      print!("{esc}[2K", esc = 27 as char);
+    }*/
+    let mut output = String::new();
+    for i in self.subdirs.clone() {
+      if i.selected {
+        output += &format!("{line}{}{line}", i.name, line=vec!['-'; ((max - i.name.len())/2) as usize].into_iter().collect::<String>());
+      } else {
+        output += &format!("{space}{}{space}", i.name, space=vec![' '; ((max-i.name.len())/2) as usize].into_iter().collect::<String>());
+      }
+      output += "\n";
+    };
+    output.split("\n").collect::<Vec<&str>>().into_iter().map(|x| x.to_string()).collect::<Vec<String>>()
+  }
+}
+
+
 #[derive(Debug,Clone,PartialEq)]
 enum BufferType {
   File,
-  Terminal
+  Terminal,
+  Directory(Provider),
 }
 #[derive(Debug,Clone,PartialEq)]
 struct EditorBuffer {
@@ -259,8 +311,66 @@ trait Editor {
   fn move_io_cursor(&mut self, vector: i32);
   fn write_string(&mut self, string: String);
 
+  fn open(&mut self, fname: String);
+  fn close(&mut self, id: usize);
 }
 impl Editor for Program {
+  fn close(&mut self, id: usize) {
+    self.buffers.remove(id);
+  }
+  fn open(&mut self, fname: String) {
+    if Path::new(&fname).exists() {
+      if Path::new(&fname).is_dir() {
+        let mut prov = Provider { subdirs: vec![], selected_index: 0, exit: false };
+
+        let mut first = true;
+        for i in fs::read_dir(Path::new(&fname)).unwrap() {
+          let abs = i.unwrap().path().to_str().unwrap().to_string();
+          prov.subdirs.push(Subdir { name: abs.split("/").collect::<Vec<&str>>().last().unwrap().to_string(), abs_path: abs, selected: first });
+          first = false;
+        }
+        let lines = prov.getlines();
+        self.buffers.push(
+          EditorBuffer {
+            cursor: (0, 0),
+            selection: ((0,0), (0,0)),
+            lines,
+            buf_type: BufferType::Directory(prov),
+            display_start_line: 0,
+            display_offset_collumn: 0,
+            buf_name: fname.clone(),
+            save_path: fname,
+          }
+        );
+      } else {
+        self.buffers.push(
+          EditorBuffer {
+            cursor: (0, 0),
+            selection: ((0,0), (0,0)),
+            lines: fs::read_to_string(fname.clone()).unwrap().split("\n").collect::<Vec<&str>>().into_iter().map(|x| String::from(x)).collect::<Vec<String>>(),
+            buf_type: BufferType::File,
+            display_start_line: 0,
+            display_offset_collumn: 0,
+            buf_name: fname.clone(),
+            save_path: fname,
+          }
+        );
+      }
+    } else {
+      self.buffers.push(
+        EditorBuffer {
+          cursor: (0, 0),
+          selection: ((0,0), (0,0)),
+          lines: vec![String::new()],
+          buf_type: BufferType::File,
+          display_start_line: 0,
+          display_offset_collumn: 0,
+          buf_name: fname.clone(),
+          save_path: fname,
+        }
+      );
+    }
+  }
   fn evaluate_io(&mut self) -> String {
     self.io_history.push(self.io.clone());
     let mut ch = self.io.chars();
@@ -475,7 +585,10 @@ impl Editor for Program {
               }
               result += &(vec![" "; free_x as usize - (i.len()-offset)].into_iter().collect::<String>() + "\n");
             } else {
-              result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+              result += &(i.to_owned());
+              //result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+              result += &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>();
+              result += "\n";
             }
           } else {
             if show_selection && line >= selection.0.1 as usize && line <= selection.1.1 as usize {
@@ -525,7 +638,7 @@ impl Editor for Program {
           //reset color
           result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
         }
-        result += &(empty_line_text.to_owned() + &vec![" "; free_x as usize - 1].into_iter().collect::<String>() + "\n");
+        result += &(empty_line_text.to_owned() + &vec![" "; free_x as usize - empty_line_text.len()].into_iter().collect::<String>() + "\n");
       }
       result += "\x1b[38;2;255;255;255m";
     } 
@@ -720,17 +833,39 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.state = State::Control;
           },
           State::Input => {
-            let index = program.get_buffer().cursor.1;
-            let index2 = program.get_buffer().cursor.0;
-            let mut leftlist = program.get_buffer().lines[..index as usize].into_iter().map(|x| x.to_string()).collect::<Vec<String>>();
-            leftlist.push(program.get_buffer().lines[index as usize][..index2 as usize].to_string());
-            leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
-            leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
-            program.get_buffer().lines = leftlist;
-            program.move_cursor((0, 1));
+            match program.get_buffer().buf_type.clone() {
+              BufferType::File => {
+                let index = program.get_buffer().cursor.1;
+                let index2 = program.get_buffer().cursor.0;
+                let mut leftlist = program.get_buffer().lines[..index as usize].into_iter().map(|x| x.to_string()).collect::<Vec<String>>();
+                leftlist.push(program.get_buffer().lines[index as usize][..index2 as usize].to_string());
+                leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
+                leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
+                program.get_buffer().lines = leftlist;
+                program.move_cursor((0, 1));
+              },
+              BufferType::Directory(d) => {
+                program.open(d.subdirs[d.selected_index].abs_path.clone());
+                program.close(program.current);
+                program.current = program.buffers.len()-1;
+                program.state = State::Control;
+              }
+              _ => {}
+            }
           },
           State::Control => {
-            program.move_cursor((0, 1));
+            match program.get_buffer().buf_type.clone() {
+              BufferType::File => {
+                program.move_cursor((0, 1));
+              },
+              BufferType::Directory(d) => {
+                program.open(d.subdirs[d.selected_index].abs_path.clone());
+                program.close(program.current);
+                program.current = program.buffers.len()-1;
+                program.state = State::Control;
+              },
+              _ => {}
+            }
           },
           State::Selection => {
             program.move_cursor((0, 1)); // move selection also pls
@@ -754,6 +889,9 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
         }
       },
       KeyCode::Delete => {
+        match program.get_buffer().buf_type.clone() {
+          BufferType::File => {
+
         match program.state {
           State::Command => {
             let mut ioc = program.io.chars().collect::<Vec<char>>();
@@ -772,7 +910,13 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
           },
           State::Input => {
-
+            let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
+            let x = program.get_buffer().cursor.0 as usize;
+            let ic = program.get_buffer().lines[index].clone();
+            let strc = ic[..x].chars();
+            let mut right = ic[x..].chars();
+            right.next();
+            program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
           },
           State::Selection => {
             let mut selection = program.get_buffer().selection;
@@ -796,18 +940,18 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 program.get_buffer().lines[selection.0.1 as usize].remove(i);
               }
             } else {
-              println!("a");
+
               for i in (selection.0.0 as usize .. program.get_buffer().lines[selection.0.1 as usize].len()).rev() {
                 program.get_buffer().lines[selection.0.1 as usize].remove(i);
               }
-              println!("b");
+
 
               let mut removed = 0;
               for i in (( selection.0.1+1 ) as usize .. ( selection.1.1-1) as usize).rev() {
                 program.get_buffer().lines.remove(i);
                 removed+=1;
               }
-              println!("c");
+
 
               
               for i in (0 .. selection.1.0 as usize-removed).rev() {
@@ -823,8 +967,15 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.state = State::Control;
           },
         }
+          }
+          _ => {},
+        }
       },
       KeyCode::Backspace => {
+        match program.get_buffer().buf_type.clone() {
+          BufferType::File => {
+
+
         match program.state {
           State::Command => {
             if program.io_cursor > 1 {
@@ -872,6 +1023,9 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             program.move_selection((-1,0));
           },
         }
+          }
+          _ => {},
+        }
       },
       KeyCode::Colon => {
         match program.state {
@@ -881,7 +1035,12 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
           
           },
           State::Input => {
-            program.write_string(String::from(":"));
+            match program.get_buffer().buf_type.clone() {
+              BufferType::File => {
+                program.write_string(String::from(":"));
+              },
+              _ => {},
+            }
           },
           State::Control => {
             program.state = State::Command;
@@ -916,7 +1075,24 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 program.move_selection((0,-1));
               },
               _ => {
-                program.move_cursor((0, -1));
+                match program.get_buffer().buf_type.clone() {
+                  BufferType::File => {
+                    program.move_cursor((0, -1));
+                  },
+                  BufferType::Directory(d) => {
+                    let mut d = d;
+                    d.subdirs[d.selected_index].selected = false;
+                    if d.selected_index as i32 -1 < 0 {
+                      d.selected_index = d.subdirs.len()-1;
+                    } else {
+                      d.selected_index -= 1;
+                    }
+                    d.subdirs[d.selected_index].selected = true;
+                    program.get_buffer().lines = d.clone().getlines();
+                    program.get_buffer().buf_type = BufferType::Directory(d);
+                  },
+                  _ => {},
+                }
               }
             }
           },
@@ -939,7 +1115,25 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 program.move_selection((0,1));
               },
               _ => {
-                program.move_cursor((0, 1));
+                 match program.get_buffer().buf_type.clone() {
+                  BufferType::File => {
+                    program.move_cursor((0, 1));
+                  },
+                  BufferType::Directory(d) => {
+                    let mut d = d;
+                    d.subdirs[d.selected_index].selected = false;
+                    if d.selected_index as i32 +1 == d.subdirs.len() as i32 {
+                      d.selected_index = 0;
+                    } else {
+                      d.selected_index += 1;
+                    }
+
+                    d.subdirs[d.selected_index].selected = true;
+                    program.get_buffer().lines = d.clone().getlines();
+                    program.get_buffer().buf_type = BufferType::Directory(d);
+                  },
+                  _ => {},
+                }
               }
             }
           },
@@ -953,7 +1147,12 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 program.move_selection((-1, 0));
               },
               _ => {
-                program.move_cursor((-1, 0));
+                match program.get_buffer().buf_type.clone() {
+                  BufferType::File => {
+                    program.move_cursor((-1, 0));
+                  },
+                  _ => {},
+                }
               }
             }
           },
@@ -967,7 +1166,12 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 program.move_selection((1, 0));
               },
               _ => {
-                program.move_cursor((1, 0));
+                match program.get_buffer().buf_type.clone() {
+                  BufferType::File => {
+                    program.move_cursor((1, 0));
+                  },
+                  _ => {},
+                }
               }
             }
           },
@@ -990,8 +1194,13 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             }
           },
           State::Input => {
-            program.write_string(c.to_string());
-            program.move_cursor((1,0));
+            match program.get_buffer().buf_type.clone() {
+              BufferType::File => {
+                program.write_string(c.to_string());
+                program.move_cursor((1,0));
+              }
+              _ => {}
+            }
           },
           State::Selection => {},
         }
@@ -1021,33 +1230,7 @@ fn main() {
   let mut args = env::args();
   args.next();
   for i in args {
-    if Path::new(&i).exists() {
-      program.buffers.push(
-        EditorBuffer {
-          cursor: (0, 0),
-          selection: ((0,0), (0,0)),
-          lines: fs::read_to_string(i.clone()).unwrap().split("\n").collect::<Vec<&str>>().into_iter().map(|x| String::from(x)).collect::<Vec<String>>(),
-          buf_type: BufferType::File,
-          display_start_line: 0,
-          display_offset_collumn: 0,
-          buf_name: i.clone(),
-          save_path: i,
-        }
-      );
-    } else {
-      program.buffers.push(
-        EditorBuffer {
-          cursor: (0, 0),
-          selection: ((0,0), (0,0)),
-          lines: vec![String::new()],
-          buf_type: BufferType::File,
-          display_start_line: 0,
-          display_offset_collumn: 0,
-          buf_name: i.clone(),
-          save_path: i,
-        }
-      );
-    }
+    program.open(i);
   }
   if program.buffers.len() == 0 {
     program.buffers.push(
@@ -1118,7 +1301,7 @@ fn main() {
     };
     //program.io =  format!("{:#?}", event);
     handle_key_event(&mut program, event);
-    if program.exit {
+    if program.exit || program.buffers.len() == 0 {
       break;
     }
     program.display();

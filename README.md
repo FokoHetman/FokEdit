@@ -13,6 +13,10 @@ Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 * plik konfiguracyjny (~/.config/FokEdit/configuration.fok; napisany w foklang) ✔️
 * konfigurowalny styl (kolorki) edytora ✔️
 * keybindy ✔️
-- selection mode
-- multi-threading
-- wyświetlanie więcej bufferów na raz
+* selection mode ✔️
+- ~~multi-threading~~ (niepotrzebne)
+- ~~wyświetlanie więcej bufferów na raz~~ (czasochłonne)
+* przeglądarka folderów ✔️
+- indykator zapisu
+- dokumentacja
+- built-ins'y foklang do edytora
