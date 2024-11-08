@@ -17,6 +17,6 @@ Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 - ~~multi-threading~~ (niepotrzebne)
 - ~~wyświetlanie więcej bufferów na raz~~ (czasochłonne)
 * przeglądarka folderów ✔️
-- indykator zapisu
-- dokumentacja
-- built-ins'y foklang do edytora
+- indykator zapisu ✔️
+- dokumentacja 
+- built-ins'y foklang do edytora [in-work]

@@ -277,6 +277,7 @@ struct EditorBuffer {
   buf_type: BufferType,
   buf_name: String,
   save_path: String,
+  saved: bool,
 }
 #[derive(Debug,Clone,PartialEq)]
 enum State {
@@ -340,6 +341,7 @@ impl Editor for Program {
             display_offset_collumn: 0,
             buf_name: fname.clone(),
             save_path: fname,
+            saved: true,
           }
         );
       } else {
@@ -353,6 +355,7 @@ impl Editor for Program {
             display_offset_collumn: 0,
             buf_name: fname.clone(),
             save_path: fname,
+            saved: true,
           }
         );
       }
@@ -367,6 +370,7 @@ impl Editor for Program {
           display_offset_collumn: 0,
           buf_name: fname.clone(),
           save_path: fname,
+          saved: false
         }
       );
     }
@@ -421,7 +425,9 @@ impl Editor for Program {
         buf_ch.next();
         buf_name = buf_ch.collect::<String>();
       }
-
+      if !self.buffers[i].saved {
+        buf_name += "*";
+      }
       result += &(vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).floor() as usize].into_iter().collect::<String>() + &buf_name + &vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).ceil() as usize].into_iter().collect::<String>());
     }
     
@@ -790,6 +796,7 @@ impl Editor for Program {
     let x = self.get_buffer().cursor.0 as usize;
     let str1 = self.get_buffer().lines[index][..x].to_owned() + &string;
     self.get_buffer().lines[index] = str1 + &self.get_buffer().lines[index][x..];
+    self.get_buffer().saved = false;
   }
 }
 impl EditorBuffer {
@@ -1243,6 +1250,7 @@ fn main() {
         display_offset_collumn: 0,
         buf_name: String::from("unnamed"),
         save_path: String::from(""),
+        saved: false,
       }
     );
   }

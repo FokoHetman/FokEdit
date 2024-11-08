@@ -713,6 +713,36 @@ pub fn select(arguments: Arguments) -> Proventus {
   }
 }
 
+pub fn open(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::singleProgram(fname, program) => {
+      let mut program = program;
+      program.open(combine_list_to_string(fname));
+      Proventus{value: Fructa::ProgramModifier(program), id: -5}
+    }
+    _ => panic!("?")
+  }
+}
+
+fn identifier(id: &str) -> Node {
+  Node{kind: NodeKind::Identifier { symbol: id.to_string(), childs: vec![] }}
+}
+fn int(int: i32) -> Proventus {
+  Proventus{value: Fructa::Numerum(int), id: -5}
+}
+
+pub fn program(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::zerumProgram(program) => {
+      let mut program = program;
+      Proventus{value: Fructa::Causor(vec![
+        (identifier("cursor"), Proventus{value: Fructa::Inventarii(vec![int(program.get_buffer().cursor.0 as i32), int(program.get_buffer().cursor.1 as i32)]), id: -5}),
+      ]), id: -5}
+    }
+    _ => panic!("?")
+  }
+}
+
 
 
 
@@ -863,6 +893,7 @@ pub fn declare_builtins(env: &mut Environment) {
     (String::from("write"), write), (String::from("w"), write), 
     (String::from("movebuf"), move_buffer), (String::from("mb"), move_buffer),
     (String::from("setbuf"), set_buffer), (String::from("b"), set_buffer),
+    (String::from("open"), open), (String::from("o"), open),
   ];
   for i in functions {
     declare_fn(i.0, i.1, env);
