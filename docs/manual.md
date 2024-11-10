@@ -16,10 +16,40 @@ Aby przejść w stan:
 
 # konfiguracja:
 Po pierwszym uruchomieniu programu stworzy się ścieżka `~/.config/FokEdit/` wraz z presetami oraz domyślnym plikiem konfiguracyjnym.
-* `~/.config/FokEdit/themes.fok` - kilka przykładowych stylów edytora, do zaimportowania i użytku.
+* `~/.config/FokEdit/presets.fok` - kilka przykładowych stylów edytora, do zaimportowania i użytku.
 * `~/.config/FokEdit/configuration.fok` - główny plik konfiguracji.
 
+Schemat głównego pliku konfiguracji wygląda mniej więcej tak:
+```fok
+{
+  theme = {};
+  elements = {};
+  ops = {};
+  keybinds = [];
+}
+```
+Omawiając po kolei:
+* theme - odpowiada za kolory edytora, może być ustawiony jako jeden z presetów - `presets.*`, domyślna wartość to `presets.minimal`.
+* elements - szczegóły edytora
+* * debug - wartości debugowania
+* * * cursor - pokazywanie pozycji kursora w prawym dolnym rogu, domyślna wartość to `true`.
+* * empty_line
+* * * text - tekst w pustych linijkach, domyślna wartość to `"~"`.
+* ops - opcje edytora
+* * line_numbers - numerowanie linijek
+* * * enable - czy numerowanie jest włączone, domyślna wartość to `false`.
+* keybinds - lista keybindów edytora.
 
 
+## Keybindy
+Reprezentuje je taka struktura:
+```fok
+{
+  key = "ctrl_left";                       #! kombinacja/keybind
+  action = "mb (0 - 1)";                   #! akcja (w języku foklang) która wydarzy się po naciśnięciu kombinacji
+  override = true;                         #! czy keybind powinien zatrzymać normalne działanie klawiszy (w tym przypadku lewej strzałki)
+  states = [states.control states.select]; #!  lista stanów w którym keybind obowiązuje
+}
+```
 
 DO DOKOŃCZENIA.

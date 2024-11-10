@@ -4,6 +4,11 @@
 ### status: niedokończony
 Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 
+---
+**[<kbd> <br> Instalacja <br> </kbd>][Install]**
+**[<kbd> <br> Dokumentacja <br> </kbd>][Documentation]**
+---
+
 ## Cel:
 > wielofunkcyjny, wydajny acz prosty w obsłudze terminalowy edytor tekstu
 
@@ -20,3 +25,8 @@ Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 - indykator zapisu ✔️
 - dokumentacja 
 - built-ins'y foklang do edytora [in-work]
+- częściowe wsparcie unicode'ów
+
+
+<!----------------------------------------------------------------->
+[Install]: https://github.com/FokoHetman/FokEdit/docs/manual.md

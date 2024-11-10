@@ -1016,7 +1016,7 @@ impl Interpreter {
           expected = 1;
         }
 
-        else if f == builtins::quit || f == builtins::select {
+        else if f == builtins::quit || f == builtins::select || f == builtins::reload {
           fargs = builtins::FunctionArgs::zerumProgram(program.clone());
         } else if f == builtins::write {
           if args_vec.len()>=1 {
@@ -1026,6 +1026,12 @@ impl Interpreter {
           }
         } else if f == builtins::load_fokedit_config || f == builtins::move_buffer || f == builtins::set_buffer || f == builtins::open {
           fargs = builtins::FunctionArgs::singleProgram(self.evaluate(args_vec[0].clone(), env, program.clone()), program.clone());
+        } else if f == builtins::set_fokedit_value {
+          if args_vec.len() >= 2 {
+            fargs = builtins::FunctionArgs::doubleProgram(self.evaluate(args_vec[0].clone(), env, program.clone()), self.evaluate(args_vec[0].clone(), env, program.clone()), program.clone());
+          } else if args_vec.len() == 1 {
+            fargs = builtins::FunctionArgs::singleProgram(self.evaluate(args_vec[0].clone(), env, program.clone()), program.clone());
+          } 
         };
 
        if got>=expected {

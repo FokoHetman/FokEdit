@@ -198,7 +198,7 @@ pub struct FokEditOps {
 }
 impl Default for FokEditOps {
   fn default() -> Self {
-    Self {line_numbers: LineNumbers{enable: false, background: RGB{r: 255, g: 255, b: 255}, foreground: RGB{r: 255, g: 255, b: 255}}}
+    Self {line_numbers: LineNumbers{enable: false, background: RGB{r: 20, g: 20, b: 20}, foreground: RGB{r: 150, g: 150, b: 150}}}
   }
 }
 
@@ -343,8 +343,236 @@ trait Editor {
 
   fn open(&mut self, fname: String);
   fn close(&mut self, id: usize);
+  fn reload(&mut self);
 }
 impl Editor for Program {
+  fn reload(&mut self) {
+    self.foklang = foklang::foklang::Foklang::new();
+    if !Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"))).exists() {
+    if !Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit"))).exists() {
+      let _ = fs::create_dir(&(env::var("HOME").unwrap() + "/.config/FokEdit")).unwrap();
+      let _ = fs::write(&(env::var("HOME").unwrap() + "/.config/FokEdit/presets.fok"), 
+"{
+  gruvbox = {
+    background = rgb 40 40 40;
+    foreground = rgb 235 219 178;
+    border = rgb 121 116 14;
+    
+    buffer = {
+      inactive = rgb 152 151 26;
+      active = rgb 184 187 38;
+    };
+
+    io = {
+      background = rgb 29 32 33;#!98 109 81;
+      foreground = rgb 104 157 106;
+    };
+
+    select = {
+      color = rgb 254 128 25;#!86 127 70;
+    };
+    empty_line = {
+      background = rgb 40 40 40;
+      foreground = rgb 142 192 124;
+    };
+    line_numbers = {
+      foreground = rgb 120 120 120;
+      background = rgb 40 40 40;
+    };
+
+  };
+  minimal = {
+    background = rgb 20 20 20;
+    foreground = rgb 255 255 255;
+    border = rgb 40 40 40;
+    
+    buffer = {
+      inactive = rgb 80 80 80;
+      active = rgb 80  80 100;
+    };
+
+    io = {
+      background = rgb 10 10 10;
+      foreground = rgb 250 250 250;
+    };
+
+    select = {
+      color = rgb 255 0 0;
+    };
+    empty_line = {
+      background = rgb 20 20 20;
+      foreground = rgb 0 0 200;
+    };
+    line_numbers = {
+      foreground = rgb 120 120 120;
+      background = rgb 20 20 20;
+    };
+  };
+  catppuccin = {
+    latte = {
+      background = rgb 239 241 245;     #! base
+      foreground = rgb 76 79 105;       #! text
+      border = rgb 156 160 176;         #! Overlay 0
+    
+      buffer = {
+        inactive = rgb 140 143 161;     #! Overlay 1
+        active = rgb 220 138 120;       #! Rosewater
+      };
+
+      io = {
+        background = rgb 230 233 239;   #! Mantle
+        foreground = rgb 92 95 119;     #! Subtext 1
+      };
+
+      select = {
+        color = rgb 114 135 253;        #! Lavender
+      };
+      empty_line = {
+        background = rgb 239 241 245;   #! Base
+        foreground = rgb 136 57 239;    #! Mauve
+      };
+      line_numbers = {
+        background = rgb 220 224 232;   #! Crust
+        foreground = rgb 108 111 133;   #! Subtext 0
+      };
+    };
+
+    frappe = {
+      background = rgb 48 52 70;        #! base
+      foreground = rgb 198 208 245;     #! text
+      border = rgb 115 121 148;         #! Overlay 0
+    
+      buffer = {
+        inactive = rgb 131 139 167;     #! Overlay 1
+        active = rgb 242 213 207;       #! Rosewater
+      };
+
+      io = {
+        background = rgb 41 44 60;      #! Mantle
+        foreground = rgb 181 191 226;   #! Subtext 1
+      };
+
+      select = {
+        color = rgb 186 187 241;        #! Lavender
+      };
+      empty_line = {
+        background = rgb 48  52  70;    #! Base
+        foreground = rgb 202 158 230;   #! Mauve
+      };
+      line_numbers = {
+        background = rgb 35 38 52;      #! Crust
+        foreground = rgb 165 173 206;   #! Subtext 0
+      };
+    };
+
+    macchiato = {
+      background = rgb 36 39 58;        #! base
+      foreground = rgb 202 211 245;     #! text
+      border = rgb 110 115 141;         #! Overlay 0
+    
+      buffer = {
+        inactive = rgb 128 135 162;     #! Overlay 1
+        active = rgb 244 219 214;       #! Rosewater
+      };
+
+      io = {
+        background = rgb 30 32 48;      #! Mantle
+        foreground = rgb 184 192 224;   #! Subtext 1
+      };
+
+      select = {
+        color = rgb 183 189 248;        #! Lavender
+      };
+      empty_line = {
+        background = rgb 36 39 58;      #! Base
+        foreground = rgb 198 160 246;   #! Mauve
+      };
+      line_numbers = {
+        background = rgb 35 38 52;      #! Crust
+        foreground = rgb 24 25 38;      #! Subtext 0
+      };
+    };
+    mocha = {
+      background = rgb 30 30 46;        #! base
+      foreground = rgb 205 214 244;     #! text
+      border = rgb 108 112 134;         #! Overlay 0
+    
+      buffer = {
+        inactive = rgb 127 132 156;     #! Overlay 1
+        active = rgb 245 224 220;       #! Rosewater
+      };
+
+      io = {
+        background = rgb 24 24 37;      #! Mantle
+        foreground = rgb 186 194 222;   #! Subtext 1
+      };
+
+      select = {
+        color = rgb 180 190 254;        #! Lavender
+      };
+      empty_line = {
+        background = rgb 30 30 46;      #! Base
+        foreground = rgb 203 166 247;   #! Mauve
+      };
+      line_numbers = {
+        background = rgb 17 17 27;      #! Crust
+        foreground = rgb 166 173 200;   #! Subtext 0
+      };
+    };
+
+  };
+}").unwrap();
+    }
+    let _ = fs::write(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"), &format!(
+"presets = load_file \"{presets}\";
+{{
+  theme = presets.minimal;
+  ops = {{
+    line_numbers = {{
+      enable = false;
+    }};
+  }};
+  elements = {{
+    empty_line = {{
+      text = \"~\";
+    }};
+    debug = {{
+      cursor = true;
+    }};
+  }};
+  keybinds = [ 
+    {{
+      key = \"ctrl_left\";                        #! ctrl_left --> ctrl + left_arrow combination #! due to budget you are not able to do stuff like ctrl_shift_left etc.
+      action = \"mb (0-1)\";                      #! foklang command, look at fokedit+foklang documentation for reference
+      override = true;                          #! override default left_arrow action
+      states = [states.control states.select];  #! states in which the keybind is valid (ex. don't move buffers with this keybind in `input` and `command` state)
+    }}
+    {{
+      key = \"ctrl_right\";
+      action = \"mb 1\";
+      override = true;
+      states = [states.control states.select];
+    }}
+    {{key=\"shift_right\"; action=\"select\";override=false;states=states.all;}}
+    {{key=\"shift_left\"; action=\"select\";override=false;states=states.all;}}
+    {{key=\"shift_up\"; action=\"select\";override=false;states=states.all;}}
+    {{key=\"shift_down\"; action=\"select\";override=false;states=states.all;}}
+  ];
+
+}}", presets = &(env::var("HOME").unwrap() + "/.config/FokEdit/presets.fok"))).unwrap();
+    }
+    let raw = self.foklang.raw_run(String::from("rgb x y z = x:(y:[z]); states = {control=0; command=1; input=2; select=3; all=[0..3]};") 
+      + &fs::read_to_string(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok")).unwrap(), self.clone());
+    
+    let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, self.clone()) });
+
+    match ran.value {
+      foklang::core::AST::Fructa::ProgramModifier(nprog) => {
+        *self = nprog;
+      }
+      _ => {}
+    }
+  }
   fn close(&mut self, id: usize) {
     self.buffers.remove(id);
   }
@@ -420,6 +648,7 @@ impl Editor for Program {
       drop(lock);
       (program,io)}
     );
+    //self.foklang.env = foklang.lock().unwrap().env.clone(); // call panic
     
     if panics.is_ok() {
       let uw = panics.unwrap();
@@ -634,11 +863,11 @@ impl Editor for Program {
                 result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..i.len()].to_owned());
               }
-              result += &(vec![" "; free_x as usize - (i.len()-offset)].into_iter().collect::<String>() + "\n");
+              result += &(vec![" "; free_x as usize - (i.chars().collect::<Vec<char>>().len()-offset)].into_iter().collect::<String>() + "\n");
             } else {
               result += &(i.to_owned());
               //result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
-              result += &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>();
+              result += &vec![" "; free_x as usize - i.chars().collect::<Vec<char>>().len() ].into_iter().collect::<String>();
               result += "\n";
             }
           } else {
@@ -717,7 +946,7 @@ impl Editor for Program {
           }
         } else {
           if i.len() <= free_x as usize {
-            result += &(i.to_owned() + &vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
+            result += &(i.to_owned() + &vec![" "; free_x as usize - i.chars().collect::<Vec<char>>().len() ].into_iter().collect::<String>() + "\n");
           } else {
             result += &(i.to_owned()[..free_x as usize].to_owned() + "\n");
           }
@@ -840,8 +1069,8 @@ impl Editor for Program {
   fn write_string(&mut self, string: String) {
     let index = (self.get_buffer().cursor.1) as usize;
     let x = self.get_buffer().cursor.0 as usize;
-    let str1 = self.get_buffer().lines[index][..x].to_owned() + &string;
-    self.get_buffer().lines[index] = str1 + &self.get_buffer().lines[index][x..];
+    let str1 = self.get_buffer().lines[index].chars().take(x).collect::<String>() + &string;
+    self.get_buffer().lines[index] = str1 + &self.get_buffer().lines[index].chars().skip(x).collect::<String>();
     self.get_buffer().saved = false;
   }
 }
@@ -957,8 +1186,11 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
             let x = program.get_buffer().cursor.0 as usize;
             let ic = program.get_buffer().lines[index].clone();
-            let strc = ic[..x].chars();
-            let mut right = ic[x..].chars();
+            let ct = ic.chars().collect::<Vec<char>>()[..x].into_iter().collect::<String>();
+            let strc = ct.chars();
+            let ct2 = ic.chars().collect::<Vec<char>>()[x..].into_iter().collect::<String>();
+            let mut right = ct2.chars();
+
             right.next();
             program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
           },
@@ -966,8 +1198,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             let index = (program.get_buffer().display_start_line + program.get_buffer().cursor.1) as usize;
             let x = program.get_buffer().cursor.0 as usize;
             let ic = program.get_buffer().lines[index].clone();
-            let strc = ic[..x].chars();
-            let mut right = ic[x..].chars();
+            let ct = ic.chars().collect::<Vec<char>>()[..x].into_iter().collect::<String>();
+            let strc = ct.chars();
+            let ct2 = ic.chars().collect::<Vec<char>>()[x..].into_iter().collect::<String>();
+            let mut right = ct2.chars();
             right.next();
             program.get_buffer().lines[index] = strc.collect::<String>() + &right.collect::<String>();
           },
@@ -1047,9 +1281,11 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             if program.get_buffer().cursor.0>0 {
               let index = (program.get_buffer().cursor.1) as usize;
               let x = program.get_buffer().cursor.0 as usize;
-              let mut strc = program.get_buffer().lines[index][..x].chars();
+              let temp = &program.get_buffer().lines[index].chars().collect::<Vec<char>>()[..x];
+              let iter = temp.into_iter().collect::<String>();
+              let mut strc = iter.chars();
               strc.next_back();
-              program.get_buffer().lines[index] = strc.collect::<String>() + &program.get_buffer().lines[index][x..];
+              program.get_buffer().lines[index] = strc.collect::<String>() + &program.get_buffer().lines[index].chars().collect::<Vec<char>>()[x..].into_iter().collect::<String>();
             
               program.move_cursor((-1,0));
             } else if program.get_buffer().cursor.0 == 0 && program.get_buffer().cursor.1 > 0 {
@@ -1305,19 +1541,8 @@ fn main() {
 
 
 
-  if Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"))).exists() {
-    let raw = program.foklang.raw_run(String::from("rgb x y z = x:(y:[z]); states = {control=0; command=1; input=2; select=3; all=[0..3]};") 
-        + &fs::read_to_string(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok")).unwrap(), program.clone());
-    
-    let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, program.clone()) });
+  program.reload();
 
-    match ran.value {
-      foklang::core::AST::Fructa::ProgramModifier(nprog) => {
-        program = nprog;
-      }
-      _ => {}
-    }
-  }
 
 
 
@@ -1338,6 +1563,76 @@ fn main() {
     
     let event = KeyEvent{
       code: match c { BACKSPACE => KeyCode::Backspace, ':' => KeyCode::Colon, '\n' => KeyCode::Enter,
+          'Ã' => {
+            match getch() {
+              '³' => {
+                KeyCode::Char('ó')
+              },
+              '\u{93}' => {
+                KeyCode::Char('Ó')
+              },
+              _ => KeyCode::Escape
+            }
+          },
+          'Ä' => {
+            match getch() {
+              '\u{99}' => {
+                KeyCode::Char('ę')
+              },
+              '\u{98}' => {
+                KeyCode::Char('Ę')
+              },
+              '\u{87}' => {
+                KeyCode::Char('ć')
+              },
+              '\u{86}' => {
+                KeyCode::Char('Ć')
+              },
+
+              '\u{85}' => {
+                KeyCode::Char('ą')
+              },
+              '\u{84}' => {
+                KeyCode::Char('Ą')
+              },
+              _ => KeyCode::Escape
+            }
+          },
+          'Å' => {
+            match getch() {
+              '\u{84}' => {
+                KeyCode::Char('ń')
+              },
+              '\u{83}' => {
+                KeyCode::Char('Ń')
+              },
+              '\u{82}' => {
+                KeyCode::Char('ł')
+              },
+              '\u{81}' => {
+                KeyCode::Char('Ł')
+              },
+              '\u{9b}' => {
+                KeyCode::Char('ś')
+              },
+              '\u{9a}' => {
+                KeyCode::Char('Ś')
+              },
+              'º' => {
+                KeyCode::Char('ź')
+              },
+              '¹' => {
+                KeyCode::Char('Ź')
+              },
+              '¼' => {
+                KeyCode::Char('ż')
+              },
+              '»' => {
+                KeyCode::Char('Ż')
+              }
+              _ => KeyCode::Escape
+            }
+          },
           '\u{1b}' => {
               match getch() { 
                     '[' => match getch() {

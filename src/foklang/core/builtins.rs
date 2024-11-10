@@ -784,6 +784,16 @@ pub fn open(arguments: Arguments) -> Proventus {
     _ => panic!("?")
   }
 }
+pub fn reload(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::zerumProgram(program) => {
+      let mut program = program;
+      program.reload();
+      Proventus{value: Fructa::ProgramModifier(program), id: -5}
+    }
+    _ => panic!("invalid args")
+  }
+}
 
 fn identifier(id: &str) -> Node {
   Node{kind: NodeKind::Identifier { symbol: id.to_string(), childs: vec![] }}
@@ -799,6 +809,35 @@ pub fn program(arguments: Arguments) -> Proventus {
       Proventus{value: Fructa::Causor(vec![
         (identifier("cursor"), Proventus{value: Fructa::Inventarii(vec![int(program.get_buffer().cursor.0 as i32), int(program.get_buffer().cursor.1 as i32)]), id: -5}),
       ]), id: -5}
+    }
+    _ => panic!("?")
+  }
+}
+
+pub fn set_fokedit_value(arguments: Arguments) -> Proventus {
+  match arguments.function {
+    FunctionArgs::doubleProgram(key, value, program) => {
+      let mut program = program;
+      match &combine_list_to_string(key) as &str {
+        "cursor" => {
+          match value.value {
+            Fructa::Inventarii(i) => {
+              program.get_buffer().cursor = (uwInt(i[0].clone()) as u32, uwInt(i[1].clone()) as u32);
+            }
+            _ => panic!("wrong value"),
+          }
+        }
+        "buffer" => {
+          match value.value {
+            Fructa::Numerum(i) => {
+              program.current = i as usize;
+            }
+            _ => panic!("wrong value"),
+          }
+        }
+        _ => panic!("wrong key")
+      }
+      Proventus{value: Fructa::ProgramModifier(program), id: -5}
     }
     _ => panic!("?")
   }
@@ -955,6 +994,10 @@ pub fn declare_builtins(env: &mut Environment) {
     (String::from("movebuf"), move_buffer), (String::from("mb"), move_buffer),
     (String::from("setbuf"), set_buffer), (String::from("b"), set_buffer),
     (String::from("open"), open), (String::from("o"), open),
+    (String::from("load_fokedit"), load_fokedit_config),
+    (String::from("program"), program),
+    (String::from("set"), set_fokedit_value),
+    (String::from("reload"), reload),
   ];
   for i in functions {
     declare_fn(i.0, i.1, env);
@@ -999,4 +1042,5 @@ pub enum FunctionArgs {
 
   zerumProgram(Program),
   singleProgram(Proventus, Program),
+  doubleProgram(Proventus, Proventus, Program),
 }

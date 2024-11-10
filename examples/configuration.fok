@@ -1,5 +1,5 @@
 {
-  colors = {
+  theme = {
     background = rgb 40 40 40;
     foreground = rgb 255 255 255;
     border = rgb 78 86 65;#!182 185 38;
@@ -15,14 +15,21 @@
     };
 
     select = {
-      background = rgb 86 127 70;
+      color = rgb 31 99 19;#!86 127 70;
+    };
+    empty_line = {
+      background = rgb 40 40 40;
+      foreground = rgb 10 50 10;
+    };
+    line_numbers = {
+      foreground = rgb 120 120 120;
+      background = rgb 40 40 40;
     };
 
   };
 
   elements = {
     empty_line = {
-      color = rgb 0 0 150;
       text = "";
     };
     debug = {
@@ -38,17 +45,15 @@
     autocompletion = true;
     line_numbers = {
       enable = true;
-      foreground = rgb 120 120 120;
-      background = rgb 40 40 40;
     };
   };
 
-  keybinds = [ #! example: ctrl_left --> ctrl + left_arrow combination #! due to budget you are not able to do stuff like ctrl_shift_left etc.;
+  keybinds = [ 
     {
-      key = "ctrl_left";
-      action = "mb (0-1)";
-      override = true;
-      states = [states.control states.select];
+      key = "ctrl_left";                        #! ctrl_left --> ctrl + left_arrow combination #! due to budget you are not able to do stuff like ctrl_shift_left etc.
+      action = "mb (0-1)";                      #! foklang command, look at fokedit+foklang documentation for reference
+      override = true;                          #! override default left_arrow action
+      states = [states.control states.select];  #! states in which the keybind is valid (ex. don't move buffers with this keybind in `input` and `command` state)
     }
     {
       key = "ctrl_right";
