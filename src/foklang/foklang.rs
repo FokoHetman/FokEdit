@@ -12,7 +12,7 @@ pub struct Foklang {
   tokenizer: core::tokenizer::Tokenizer,
   parser: core::parser::Parser,
   interpreter: core::interpreter::Interpreter,
-  env: core::env::Environment,
+  pub env: core::env::Environment,
 }
 impl Foklang {
   pub fn new() -> Self {

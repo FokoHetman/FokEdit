@@ -1,7 +1,7 @@
 #![allow(unused_doc_comments)]
 mod foklang;
 use {libc, std::{
-  env, fs, io::{self, IsTerminal, Read, Write}, path::Path, sync::Mutex
+  env, fs, io::{self, IsTerminal, Read, Write}, path::Path, sync::{Arc,Mutex}
 }};
 
 static termios: Mutex<libc::termios> = Mutex::new(libc::termios { c_iflag: 0, c_oflag: 0, c_cflag: 0, c_lflag: 0, c_line: 1, c_cc: [0 as u8; 32], c_ispeed: 1, c_ospeed: 1 });
@@ -110,11 +110,16 @@ pub struct EmptyLine {
   text: String,
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug,Clone,PartialEq,Copy)]
 pub struct RGB {
   r: u8,
   g: u8,
   b: u8,
+}
+impl std::fmt::Display for RGB {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{};{};{}", self.r, self.g, self.b)
+  }
 }
 
 
@@ -155,7 +160,10 @@ pub struct ColorConfig {
   foreground: RGB,
   border: RGB,
 
-  empty_line_color: RGB,
+  empty_line_background: RGB,
+  empty_line_foreground: RGB,
+  
+  selection_color: RGB,
 
   active_buffer: RGB,
   inactive_buffer: RGB,
@@ -168,9 +176,11 @@ impl Default for ColorConfig {
     /*Self {background: RGB{r: 65, g: 31, b: 86}, foreground: RGB{r: 255, g: 255, b: 255}, border: RGB{r: 40, g: 40, b: 40},
           active_buffer: RGB{r: 75, g: 81, b: 66}, inactive_buffer: RGB{r: 46, g: 14, b: 79}, empty_line_color: RGB{r: 0, g: 0, b: 255},
           io_background: RGB{r: 56, g: 68, b: 37}, io_foreground: RGB{r: 255, g: 255, b: 255}*/ 
-      Self {background: RGB{r: 255, g: 255, b: 255}, foreground: RGB{r: 255, g: 255, b: 255}, border: RGB{r: 255, g: 255, b: 255},
-          active_buffer: RGB{r: 255, g: 255, b: 255}, inactive_buffer: RGB{r: 255, g: 255, b: 255}, empty_line_color: RGB{r: 255, g: 255, b: 255},
-          io_background: RGB{r: 255, g: 255, b: 255}, io_foreground: RGB{r: 255, g: 255, b: 255}
+      Self {background: RGB{r: 20, g: 20, b: 20}, foreground: RGB{r: 255, g: 255, b: 255}, border: RGB{r: 40, g: 40, b: 40},
+          active_buffer: RGB{r: 80, g: 80, b: 100}, inactive_buffer: RGB{r: 80, g: 80, b: 80},
+          empty_line_background: RGB{r: 20, g: 20, b: 20}, empty_line_foreground: RGB{r: 0, g: 0, b: 200},
+          io_background: RGB{r: 10, g: 10, b: 10}, io_foreground: RGB{r: 250, g: 250, b: 250},
+          selection_color: RGB{r: 255, g: 0, b: 0},
     }
   }
 }
@@ -194,11 +204,22 @@ impl Default for FokEditOps {
 
 
 #[derive(Debug,Clone,PartialEq)]
+pub struct FokLangSettings { 
+  persistence: bool,
+}
+impl Default for FokLangSettings {
+  fn default() -> Self {
+    Self {persistence: false}
+  }
+}
+
+#[derive(Debug,Clone,PartialEq)]
 pub struct FokEditConfig {
   colors: ColorConfig,
   elements: ElementsConfig,
   keybinds: Keybinds,
   ops: FokEditOps,
+  foklang: FokLangSettings,
   /*
   highlighting: HighlightingConfig,
   options: FokEditOpts,
@@ -206,7 +227,8 @@ pub struct FokEditConfig {
 }
 impl Default for FokEditConfig {
   fn default() -> Self {
-    Self {colors: ColorConfig{..Default::default()}, elements: ElementsConfig{..Default::default()}, keybinds: Keybinds{..Default::default()},  ops: FokEditOps{..Default::default()}}
+    Self {colors: ColorConfig{..Default::default()}, elements: ElementsConfig{..Default::default()},
+    keybinds: Keybinds{..Default::default()},  ops: FokEditOps{..Default::default()}, foklang: FokLangSettings{..Default::default()}}
   }
 }
 
@@ -261,6 +283,12 @@ impl ProviderFn for Provider{
 }
 
 
+
+fn format_rgb(color: RGB) -> String {
+  format!("{};{};{}", color.r, color.g, color.b)
+}
+
+
 #[derive(Debug,Clone,PartialEq)]
 enum BufferType {
   File,
@@ -272,6 +300,7 @@ struct EditorBuffer {
   cursor: (u32, u32),
   selection: ((u32, u32), (u32, u32)), // (start_loc, end_loc)
   lines: Vec<String>,
+  old_lines: Vec<String>,
   display_start_line: u32,
   display_offset_collumn: u32,
   buf_type: BufferType,
@@ -335,6 +364,7 @@ impl Editor for Program {
           EditorBuffer {
             cursor: (0, 0),
             selection: ((0,0), (0,0)),
+            old_lines: lines.clone(),
             lines,
             buf_type: BufferType::Directory(prov),
             display_start_line: 0,
@@ -350,6 +380,7 @@ impl Editor for Program {
             cursor: (0, 0),
             selection: ((0,0), (0,0)),
             lines: fs::read_to_string(fname.clone()).unwrap().split("\n").collect::<Vec<&str>>().into_iter().map(|x| String::from(x)).collect::<Vec<String>>(),
+            old_lines: fs::read_to_string(fname.clone()).unwrap().split("\n").collect::<Vec<&str>>().into_iter().map(|x| String::from(x)).collect::<Vec<String>>(),
             buf_type: BufferType::File,
             display_start_line: 0,
             display_offset_collumn: 0,
@@ -365,6 +396,7 @@ impl Editor for Program {
           cursor: (0, 0),
           selection: ((0,0), (0,0)),
           lines: vec![String::new()],
+          old_lines: vec![String::new()],
           buf_type: BufferType::File,
           display_start_line: 0,
           display_offset_collumn: 0,
@@ -380,16 +412,21 @@ impl Editor for Program {
     let mut ch = self.io.chars();
     ch.next();
 
-    let mut foklang = self.foklang.clone();
-
+    let foklang = Arc::new(Mutex::new(self.foklang.clone()));
     let panics = std::panic::catch_unwind(|| {
-      let (program,io) = foklang.run(ch.collect::<String>(), self.clone()); // foklang.run returns display of returned value from foklang code
-      drop(foklang);
+      let mut lock = foklang.lock();
+      let (program,io) = lock.as_mut().unwrap().run(ch.collect::<String>(), self.clone()); // foklang.run returns display of returned value from foklang code
+      //drop(foklang);
+      drop(lock);
       (program,io)}
     );
+    
     if panics.is_ok() {
       let uw = panics.unwrap();
       *self = uw.0;
+      if self.config.foklang.persistence {
+        self.foklang.env = foklang.lock().unwrap().env.clone(); // persistence
+      }
       uw.1
     } else {
       String::from("Foklang panicked.")
@@ -400,17 +437,24 @@ impl Editor for Program {
     let _ = io::stdout().flush();
   }
   fn display(&mut self) {
+    let temp_lines = self.get_buffer().lines.clone();
+    if temp_lines == self.get_buffer().old_lines {
+      self.get_buffer().saved = true;
+    } else {
+      self.get_buffer().saved = false;
+    }
+    drop(temp_lines);
     let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
     let mut result = String::new();
     result += "\x1b[2J\x1b[H";
     let max_buf_display_len = 16;
+    let active_buffer_color = self.config.colors.active_buffer;
+    let inactive_buffer_color = self.config.colors.inactive_buffer;
     for i in 0..self.buffers.len() {
       if i == self.current {
-        let color_pack = self.config.colors.active_buffer.clone();
-        result+=&format!("\x1b[48;2;{r};{g};{b}m\x1b[1m", r=color_pack.r, g=color_pack.g, b=color_pack.b);
+        result+=&format!("\x1b[48;2;{active_buffer_color}m\x1b[1m");
       } else {
-        let color_pack = self.config.colors.inactive_buffer.clone();
-        result+=&format!("\x1b[48;2;{r};{g};{b}m\x1b[22m", r=color_pack.r, g=color_pack.g, b=color_pack.b);
+        result+=&format!("\x1b[48;2;{inactive_buffer_color}m\x1b[22m");
       }
       
       let mut buf_name = self.buffers[i].buf_name.clone();
@@ -431,22 +475,23 @@ impl Editor for Program {
       result += &(vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).floor() as usize].into_iter().collect::<String>() + &buf_name + &vec![" "; ((max_buf_display_len - buf_name.len()) as f32 / 2.0).ceil() as usize].into_iter().collect::<String>());
     }
     
-    let border_color = self.config.colors.border.clone();
-    let background_color = self.config.colors.background.clone();
+    let border_color = self.config.colors.border;
+    let background_color = self.config.colors.background;
+    let foreground_color = self.config.colors.foreground;
 
-    let foreground_color = self.config.colors.foreground.clone();
+    let selection_color = self.config.colors.selection_color;
 
-    result += &format!("\x1b[22m\x1b[48;2;{r};{g};{b}m", r=border_color.r, g=border_color.g, b=border_color.b);
+    result += &format!("\x1b[22m\x1b[48;2;{border_color}m");
     result += &(vec![" "; terx as usize - self.buffers.len()*max_buf_display_len]).into_iter().collect::<String>();
     //result +=  "\x1b[0m";
-    result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+    result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
     //let mut display_sl = 0 as u32;
     let free_y = tery-3;
 
     
     let line_numbers = self.config.ops.line_numbers.enable;
-    let line_nums_background = self.config.ops.line_numbers.background.clone();
-    let line_nums_foreground = self.config.ops.line_numbers.foreground.clone();
+    let line_nums_background = self.config.ops.line_numbers.background;
+    let line_nums_foreground = self.config.ops.line_numbers.foreground;
     
     let mut free_x = terx;
     if line_numbers {
@@ -510,7 +555,7 @@ impl Editor for Program {
       for i in &self.get_buffer().lines[left..rlen] {
         if line_numbers {
 
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+          result += &format!("\x1b[38;2;{line_nums_foreground}m\x1b[48;2;{line_nums_background}m");
 
 
           result += &vec![" "; (terx - free_x - (line+1).to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
@@ -518,7 +563,7 @@ impl Editor for Program {
           result += " ";
 
           //reset color
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+          result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
         }
         if offset > 0 {
           if i.len()  > offset {
@@ -527,26 +572,26 @@ impl Editor for Program {
               let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
                                  (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
               if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[offset..max].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
               } else if selection.0.1 == selection.1.1 && line == selection.0.1 as usize {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0 as usize..max].to_owned());
               
               } else if selection.0.1 == line as u32 {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..max].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 //hi dumbass please implement that in near future
               } else if selection.1.1 == line as u32 {
-                result += "\x1b[38;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..max].to_owned());
               }
             } else {
@@ -568,25 +613,25 @@ impl Editor for Program {
               let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
                                  (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
               if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &i.to_owned();
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
               } else if selection.0.1 == selection.1.1 && line==selection.0.1 as usize {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0 as usize].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..i.len()].to_owned());
               } else if selection.0.1 == line as u32 {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..i.len()].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
               } else if selection.1.1 == line as u32 {
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..i.len()].to_owned());
               }
               result += &(vec![" "; free_x as usize - (i.len()-offset)].into_iter().collect::<String>() + "\n");
@@ -601,25 +646,25 @@ impl Editor for Program {
               let selectionmin = ((std::cmp::max(selection.0.0 as usize, offset), std::cmp::min(selection.0.1 as usize, offset+free_x as usize)), 
                                  (std::cmp::max(selection.1.0 as usize, offset), std::cmp::min(selection.1.1 as usize, offset+free_x as usize)));
               if selection.0.1 < line as u32 && selection.1.1 > line as u32 {
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &i.to_owned();
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
               } else if selection.0.1 == selection.1.1 && line==selection.0.1 as usize {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..selectionmin.1.0].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..free_x as usize].to_owned());
               } else if selection.0.1 == line as u32 {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..free_x as usize].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
               } else if selection.1.1 == line as u32 {
-                result += "\x1b[48;2;255;0;0m";
+                result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
-                result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+                result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
                 result += &(i.to_owned()[selectionmin.1.0..free_x as usize].to_owned());
               }
               result += "\n";
@@ -632,17 +677,18 @@ impl Editor for Program {
         line += 1;
       }
 
-      let empty_line_color = self.config.colors.empty_line_color.clone();
+      let empty_line_background = self.config.colors.empty_line_background;
+      let empty_line_foreground = self.config.colors.empty_line_foreground;
       let empty_line_text = self.config.elements.empty_line.text.clone();
 
-      result += &format!("\x1b[38;2;{r};{g};{b}m", r=empty_line_color.r, g=empty_line_color.b, b=empty_line_color.b);
-      for i in 0..(((free_y) as u16) - (rlen - left) as u16) {
+      result += &format!("\x1b[38;2;{empty_line_foreground}m\x1b[48;2;{empty_line_background}m");
+      for _ in 0..(((free_y) as u16) - (rlen - left) as u16) {
         if line_numbers {
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+          result += &format!("\x1b[38;2;{line_nums_foreground}m\x1b[48;2;{line_nums_background}m");
           result += &vec![" "; (terx-free_x) as usize].into_iter().collect::<String>();
 
           //reset color
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+          result += &format!("\x1b[38;2;{empty_line_foreground}m\x1b[48;2;{empty_line_background}m");
         }
         result += &(empty_line_text.to_owned() + &vec![" "; free_x as usize - empty_line_text.len()].into_iter().collect::<String>() + "\n");
       }
@@ -654,13 +700,13 @@ impl Editor for Program {
       let mut line = left;
       for i in &self.get_buffer().lines[left..left+(free_y) as usize] {
         if  line_numbers {
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=line_nums_background.r, g=line_nums_background.g, b=line_nums_background.b, r2=line_nums_foreground.r, g2=line_nums_foreground.g, b2=line_nums_foreground.b);
+          result += &format!("\x1b[38;2;{line_nums_foreground}m\x1b[48;2;{line_nums_background}m");
           result += &vec![" "; (terx - free_x - (line+1).to_string().len() as u16 - 1) as usize].into_iter().collect::<String>();
           result += &(line+1).to_string();
           result += " ";
 
           //reset color 
-          result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=background_color.r, g=background_color.g, b=background_color.b, r2=foreground_color.r, g2=foreground_color.g, b2=foreground_color.b);
+          result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
         }
         if offset > 0 {
           if i.len()  > offset {
@@ -686,7 +732,7 @@ impl Editor for Program {
     let io_background = self.config.colors.io_background.clone();
     let io_foreground = self.config.colors.io_foreground.clone();
 
-    result += &format!("\x1b[38;2;{r2};{g2};{b2}m\x1b[48;2;{r};{g};{b}m", r=io_background.r, g=io_background.g, b=io_background.b, r2=io_foreground.r, g2=io_foreground.g, b2=io_foreground.b);
+    result += &format!("\x1b[38;2;{io_foreground}m\x1b[48;2;{io_background}m");
     result += &(vec![" "; terx as usize]).into_iter().collect::<String>();
     result += "\n";
 
@@ -849,7 +895,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
                 leftlist.push(program.get_buffer().lines[index as usize][index2 as usize..].to_string());
                 leftlist.append(&mut program.get_buffer().lines[index as usize+1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>());
                 program.get_buffer().lines = leftlist;
-                program.move_cursor((0, 1));
+                program.move_cursor((-i32::MAX, 1));
               },
               BufferType::Directory(d) => {
                 program.open(d.subdirs[d.selected_index].abs_path.clone());
@@ -962,7 +1008,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
 
               
               for i in (0 .. selection.1.0 as usize-removed).rev() {
-                println!("{}", i, );
+                //println!("{}", i, );
                 program.get_buffer().lines[selection.1.1 as usize - removed].remove(i);
                 
               }
@@ -1045,6 +1091,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
             match program.get_buffer().buf_type.clone() {
               BufferType::File => {
                 program.write_string(String::from(":"));
+                program.move_cursor((1,0));
               },
               _ => {},
             }
@@ -1245,6 +1292,7 @@ fn main() {
         cursor:  (0, 0),
         selection: ((0,0), (0,0)),
         lines: vec![String::new()],
+        old_lines: vec![String::new()],
         buf_type: BufferType::File,
         display_start_line: 0,
         display_offset_collumn: 0,
