@@ -29,5 +29,5 @@ Prowizoryczny edytor tekstu bazowany na terminalu, inspirowany NeoVimem.
 
 
 <!----------------------------------------------------------------------->
-[Documentation]: https://github.com/FokoHetman/FokEdit/docs/manual.md
-[Install]: https://github.com/FokoHetman/FokEdit/docs/installation.md
+[Documentation]: https://github.com/FokoHetman/FokEdit/blob/master/docs/manual.md
+[Install]: https://github.com/FokoHetman/FokEdit/blob/master/docs/installation.md
