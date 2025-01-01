@@ -283,12 +283,6 @@ impl ProviderFn for Provider{
 }
 
 
-
-fn format_rgb(color: RGB) -> String {
-  format!("{};{};{}", color.r, color.g, color.b)
-}
-
-
 #[derive(Debug,Clone,PartialEq)]
 enum BufferType {
   File,
@@ -521,7 +515,7 @@ impl Editor for Program {
     };
 
   };
-}").unwrap();
+}").unwrap(); //note it'd be a good practice to put that in some file and just `cp` it, however: no.
     }
     let _ = fs::write(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"), &format!(
 "presets = load_file \"{presets}\";
@@ -665,7 +659,7 @@ impl Editor for Program {
     print!("\x1b[?47l\x1b 8");
     let _ = io::stdout().flush();
   }
-  fn display(&mut self) {
+  fn display(&mut self) { // scary math
     let temp_lines = self.get_buffer().lines.clone();
     if temp_lines == self.get_buffer().old_lines {
       self.get_buffer().saved = true;
@@ -816,7 +810,7 @@ impl Editor for Program {
                 result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[selectionmin.0.0..max].to_owned());
                 result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
-                //hi dumbass please implement that in near future
+                //there was something to implement there, however I don't remember what
               } else if selection.1.1 == line as u32 {
                 result += &format!("\x1b[48;2;{selection_color}m");
                 result += &(i.to_owned()[offset..selectionmin.1.0].to_owned());
@@ -845,7 +839,6 @@ impl Editor for Program {
                 result += &format!("\x1b[48;2;{selection_color}m");
                 result += &i.to_owned();
                 result += &format!("\x1b[38;2;{foreground_color}m\x1b[48;2;{background_color}m");
-                result += &(vec![" "; free_x as usize - i.len() ].into_iter().collect::<String>() + "\n");
               } else if selection.0.1 == selection.1.1 && line==selection.0.1 as usize {
                 result += &(i.to_owned()[offset..selectionmin.0.0].to_owned());
                 result += &format!("\x1b[48;2;{selection_color}m");
@@ -973,15 +966,23 @@ impl Editor for Program {
     }
     let c = self.get_buffer().cursor;
     let col = self.get_buffer().display_offset_collumn;
-    let cursor_string = format!("{}:{}:;:{}:{};", col, self.get_buffer().display_start_line, c.0, c.1);
-    result += &(self.io.clone() + &(vec![" "; terx as usize - self.io.len() - 1 - cursor_string.len()]).into_iter().collect::<String>());
-    result += &cursor_string;
-    result += match self.state {
-      State::Input => "1",
-      State::Control => "0",
-      State::Command => "2",
-      State::Selection => "3",
+
+    let cursor_string;
+    if self.config.elements.debug.cursor {
+      cursor_string = format!("{}:{}:;:{}:{};", col, self.get_buffer().display_start_line, c.0, c.1);
+    } else {
+      cursor_string = String::new();
+    }
+    let mode = match self.state {
+      State::Input => "Input",
+      State::Control => "Control",
+      State::Command => "Command",
+      State::Selection => "Select",
     };
+
+    result += &(self.io.clone() + &(vec![" "; terx as usize - self.io.len() - mode.len() - cursor_string.len()]).into_iter().collect::<String>());
+    result += &cursor_string;
+    result +=  mode;
     match self.state {
       State::Command => {
         let column = self.io_cursor+1;
@@ -1084,7 +1085,7 @@ impl EditorBuffer {
     result
   }
 }
-fn handle_key_event(program: &mut Program, event: KeyEvent) {
+fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
   let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
   let mut overridek = false;
   for i in program.config.keybinds.keybinds.clone() {
@@ -1234,14 +1235,14 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
 
 
               let mut removed = 0;
-              for i in (( selection.0.1+1 ) as usize .. ( selection.1.1-1) as usize).rev() {
+              for i in (( selection.0.1+1 ) as usize .. ( selection.1.1) as usize).rev() {
                 program.get_buffer().lines.remove(i);
                 removed+=1;
               }
 
 
               
-              for i in (0 .. selection.1.0 as usize-removed).rev() {
+              for i in (0 .. selection.1.0 as usize-removed+1).rev() {
                 //println!("{}", i, );
                 program.get_buffer().lines[selection.1.1 as usize - removed].remove(i);
                 
@@ -1497,6 +1498,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) {
       },
     }
   }
+  program.clone()
 }
 
 
@@ -1651,7 +1653,20 @@ fn main() {
       modifiers,
     };
     //program.io =  format!("{:#?}", event);
-    handle_key_event(&mut program, event);
+    
+    
+    let panics = std::panic::catch_unwind(|| {
+      handle_key_event(&mut program.clone(), event.clone())
+    });
+    //self.foklang.env = foklang.lock().unwrap().env.clone(); // call panic
+    
+    if panics.is_ok() {
+      program = panics.unwrap().clone();
+    } else {
+      program.io = format!("FokEdit panicked trying to handle: {:#?}.", event.code);
+    }
+
+    //handle_key_event(&mut program, event);
     if program.exit || program.buffers.len() == 0 {
       break;
     }
