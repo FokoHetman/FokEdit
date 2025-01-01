@@ -4,7 +4,7 @@
 
 
 
-* Pozostałe systemy Linux:
+* ## Pozostałe systemy Linux:
 ### Instalacja Cargo Rust:
 > kompilowane za pomocą cargo `cargo 1.82.0 (8f40fc59f 2024-08-21)`
 - Powołując się na oficjalną stronę [rust-lang](<https://www.rust-lang.org/learn/get-started>)
@@ -20,7 +20,7 @@ cargo build             # lub `cargo run`, pomijając następną komendę
 ```
 
 
-* Nix/NixOS:
+* ## Nix/NixOS:
 > metoda zalecana, ze względu na 100% kompatybilność z ustawieniami autora.
 * * Nix:
 ```nix
