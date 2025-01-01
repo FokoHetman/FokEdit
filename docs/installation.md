@@ -5,12 +5,12 @@
 
 
 * Pozostałe systemy Linux:
-## Instalacja Cargo Rust:
+### Instalacja Cargo Rust:
 > kompilowane za pomocą cargo `cargo 1.82.0 (8f40fc59f 2024-08-21)`
 - Powołując się na oficjalną stronę [rust-lang](<https://www.rust-lang.org/learn/get-started>)
 ```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
-> Można również zainstalować lokalnego menedżera pakietów, instalując pakiet `cargo`
-## Instalacja FokEdit:
+> Można również zainstalować za pomocą lokalnego menedżera pakietów, instalując pakiet `cargo`
+### Instalacja FokEdit:
 
 ```
 git clone https://github.com/fokohetman/FokEdit
