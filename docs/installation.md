@@ -44,3 +44,10 @@ environment.systemPackages = with pkgs; [
   inputs.fokedit.packages.${system}.default
 ];
 ```
+- - flakeless:
+```nix
+#configuration.nix
+environment.systemPackages = with pkgs; [
+  (builtins.getFlake "git+ssh://git@github.com/fokohetman/fokedit")
+];
+```
