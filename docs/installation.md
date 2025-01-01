@@ -1,6 +1,6 @@
-## FokEdit działa **tylko** na systemach typu GNU/Linux (ze względu na libc) oraz na WSL
+### FokEdit działa **tylko** na systemach typu GNU/Linux (ze względu na libc) oraz na WSL
 
-## Metody instalacji:
+# Metody instalacji:
 
 
 
