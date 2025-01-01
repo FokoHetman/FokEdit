@@ -14,7 +14,7 @@ Aby przejść w stan:
 * Select - [zależne od konfiguracji] w dowolnym stanie należy nacisnąć kombinację `shift+strzałka`.
 
 
-# konfiguracja:
+# Konfiguracja:
 Po pierwszym uruchomieniu programu stworzy się ścieżka `~/.config/FokEdit/` wraz z presetami oraz domyślnym plikiem konfiguracyjnym.
 * `~/.config/FokEdit/presets.fok` - kilka przykładowych stylów edytora, do zaimportowania i użytku.
 * `~/.config/FokEdit/configuration.fok` - główny plik konfiguracji.
@@ -52,4 +52,66 @@ Reprezentuje je taka struktura:
 }
 ```
 
-DO DOKOŃCZENIA.
+Domyślna konfiguracja ma zdefiniowane następujące keybindy:
+
+shift_[up/left/down/right] - wejdź w tryb zaznaczenia.
+control_[left/right] - zmień buffer (1 w lewo/prawo)
+
+
+
+można ją również zobaczyć tutaj:
+
+```
+presets = load_file "/home/USERNAME/.config/FokEdit/presets.fok";
+{
+  theme = presets.minimal;
+  ops = {
+    line_numbers = {
+      enable = false;
+    };
+  };
+  elements = {
+    empty_line = {
+      text = "~";
+    };
+    debug = {
+      cursor = true;
+    };
+  };
+  keybinds = [ 
+    {
+      key = "ctrl_left";                        #! ctrl_left --> ctrl + left_arrow combination #! due to budget you are not able to do stuff like ctrl_shift_left etc.
+      action = "mb (0-1)";                      #! foklang command, look at fokedit+foklang documentation for reference
+      override = true;                          #! override default left_arrow action
+      states = [states.control states.select];  #! states in which the keybind is valid (ex. don't move buffers with this keybind in `input` and `command` state)
+    }
+    {
+      key = "ctrl_right";
+      action = "mb 1";
+      override = true;
+      states = [states.control states.select];
+    }
+    {key="shift_right"; action="select";override=false;states=states.all;}
+    {key="shift_left"; action="select";override=false;states=states.all;}
+    {key="shift_up"; action="select";override=false;states=states.all;}
+    {key="shift_down"; action="select";override=false;states=states.all;}
+  ];
+
+}
+```
+
+
+
+
+
+
+Lista wbudowanych komend FokLang-FokEdit:
+
+* `[q/quit/exit]` - wyjście z programu                                              #! ex. `q`
+* `[w/write] [[opcjonalnie] nazwa pliku: String]` - zapisz plik                     #! ex. `w`, `w test.txt`
+* `[mb/movebuf] [ilość: i32]` - przemieszczanie się między bufferami                #! ex. `mb 1`, `mb 0-1`
+* `[b/setbuf] [buffer: i32]` - zmień aktywny buffer na argument                     #! ex. `b 3`, `b 1`, `b 0`
+* `[o/open] [nazwa pliku: String]` - otwórz plik w nowym bufferze                   #! ex. `o "configuration.fok"`, `o "/home/foko/Projects/test.txt"`
+* `[load_fokedit] [konfiguracja: {}]` - załaduj konfigurację z argumentu            #! ex. `load_fokedit {theme = presets.gruvbox;}`
+* `[program]` - zbiór kilku zmiennych (aktualnie jedynie cursor)                    #! ex. `program.cursor`
+
