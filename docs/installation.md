@@ -22,7 +22,7 @@ cargo build             # lub `cargo run`, pomijając następną komendę
 
 * ## Nix/NixOS:
 > metoda zalecana, ze względu na 100% kompatybilność z ustawieniami autora.
-* * Nix:
+* * ### Nix:
 ```nix
 nix shell github:fokohetman/FokEdit
 ```
@@ -31,7 +31,7 @@ następnie, w nowostworzonym tymczasowym ENV:
 FokEdit [*opcjonalnie: pliki do edycji]
 ```
 ex. `FokEdit`, `FokEdit ~/.config/FokEdit/configuration.fok`, `FokEdit ~/Projects/`.
-* * NixOS:
+* * ### NixOS:
 - jak każdy inny flake, tzn:
 - - flake:
 ```nix
