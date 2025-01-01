@@ -1,5 +1,5 @@
 {
-  theme = {
+  theme = {                                     #! theme defining colors of the editor - presets are generated on first launch at ~/.config/FokEdit/
     background = rgb 40 40 40;
     foreground = rgb 255 255 255;
     border = rgb 78 86 65;#!182 185 38;
@@ -29,20 +29,15 @@
   };
 
   elements = {
-    empty_line = {
-      text = "";
+    empty_line = {                              #! no-line indicator
+      text = "~";
     };
-    debug = {
+    debug = {                                   #! debug options
       cursor = true;
     };
   };
 
-  highlighting = {
-    functions = rgb 182 185 38;
-    keywords = rgb 15 140 75;
-  };
   ops = {
-    autocompletion = true;
     line_numbers = {
       enable = true;
     };
