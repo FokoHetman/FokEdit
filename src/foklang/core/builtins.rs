@@ -564,6 +564,17 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       
       match opsc.value {
         Fructa::Causor(_) => {
+          let tab_size = getw(opsc.clone(), "tab_size");
+          match tab_size.value {
+            Fructa::Numerum(i) => {
+              if i<0 {
+                program.io = "Error: ops.tab_size < 0".to_string();
+              } else {
+                ops.tab_size = i as usize;
+              }
+            },
+            _ => {}
+          }
           let line_numbers = getw(opsc.clone(), "line_numbers");
           match line_numbers.value {
             Fructa::Causor(_) => {

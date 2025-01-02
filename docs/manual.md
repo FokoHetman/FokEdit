@@ -62,10 +62,11 @@ control_[left/right] - zmień buffer (1 w lewo/prawo)
 można ją również zobaczyć tutaj:
 
 ```
-presets = load_file "/home/USERNAME/.config/FokEdit/presets.fok";
+presets = load_file "/home/foko/.config/FokEdit/presets.fok";
 {
   theme = presets.minimal;
   ops = {
+    tab_size = 2;
     line_numbers = {
       enable = false;
     };
@@ -77,6 +78,9 @@ presets = load_file "/home/USERNAME/.config/FokEdit/presets.fok";
     debug = {
       cursor = true;
     };
+  };
+  foklang = {
+    persistence = true;
   };
   keybinds = [ 
     {

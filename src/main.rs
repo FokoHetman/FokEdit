@@ -4,8 +4,10 @@ use {libc, std::{
   env, fs, io::{self, IsTerminal, Read, Write}, path::Path, sync::{Arc,Mutex}
 }};
 
-static termios: Mutex<libc::termios> = Mutex::new(libc::termios { c_iflag: 0, c_oflag: 0, c_cflag: 0, c_lflag: 0, c_line: 1, c_cc: [0 as u8; 32], c_ispeed: 1, c_ospeed: 1 });
 
+/*libc termios let's terminal become "raw" - that is, handle input without need to press `enter`*/
+
+static termios: Mutex<libc::termios> = Mutex::new(libc::termios { c_iflag: 0, c_oflag: 0, c_cflag: 0, c_lflag: 0, c_line: 1, c_cc: [0 as u8; 32], c_ispeed: 1, c_ospeed: 1 });
 
 fn setup_termios() {
   termios.lock().unwrap().c_cflag &= !libc::CSIZE;
@@ -29,7 +31,7 @@ fn enable_raw_mode() {
 }
 
 
-#[repr(C)]              /// shout out (github.com) softprops/termsize!!
+#[repr(C)]              /// (github.com) softprops/termsize!!
 #[derive(Debug)]
 pub struct UnixSize {
     pub rows: libc::c_ushort,
@@ -44,7 +46,7 @@ fn get_terminal_size() -> Option<TerminalSize> {
   if !std::io::stdout().is_terminal() {
     return None;
   }
-  let mut us = UnixSize { // fuck windows
+  let mut us = UnixSize { // we don't support windows here
     rows: 0,
     cols: 0,
     x: 0,
@@ -61,7 +63,7 @@ fn get_terminal_size() -> Option<TerminalSize> {
   }
 }
 
-
+/*structures & enums to hold config params, and keyevents*/
 #[derive(Debug,Clone,PartialEq)]
 pub struct KeyEvent {
   pub code: KeyCode,
@@ -86,6 +88,7 @@ pub enum KeyCode {
   Escape,
   Colon,
   Enter,
+  Tab,
   Backspace,
   Delete,
   Arrow(Direction),
@@ -195,10 +198,11 @@ pub struct LineNumbers {
 #[derive(Debug,Clone,PartialEq)]
 pub struct FokEditOps {
   line_numbers: LineNumbers,
+  tab_size: usize,
 }
 impl Default for FokEditOps {
   fn default() -> Self {
-    Self {line_numbers: LineNumbers{enable: false, background: RGB{r: 20, g: 20, b: 20}, foreground: RGB{r: 150, g: 150, b: 150}}}
+    Self {tab_size: 4, line_numbers: LineNumbers{enable: false, background: RGB{r: 20, g: 20, b: 20}, foreground: RGB{r: 150, g: 150, b: 150}}}
   }
 }
 
@@ -233,17 +237,13 @@ impl Default for FokEditConfig {
 }
 
 
-
+/*File Explorer*/
 #[derive(Debug,Clone,PartialEq)]
 struct Subdir {
   name: String,
   abs_path: String,
   selected: bool,
 }
-
-
-const SELECTED_COLOR: i32 = 178;
-const INACTIVE_COLOR: i32 = 253; // make non-hardcoded
 
 #[derive(Debug,Clone,PartialEq)]
 struct Provider {
@@ -282,6 +282,8 @@ impl ProviderFn for Provider{
   }
 }
 
+
+/* buffer - editor's window*/
 
 #[derive(Debug,Clone,PartialEq)]
 enum BufferType {
@@ -342,6 +344,8 @@ trait Editor {
 impl Editor for Program {
   fn reload(&mut self) {
     self.foklang = foklang::foklang::Foklang::new();
+
+    /* create default config file if ~/.config/FokEdit doesn't exist */
     if !Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok"))).exists() {
     if !Path::new(Path::new(&(env::var("HOME").unwrap() + "/.config/FokEdit"))).exists() {
       let _ = fs::create_dir(&(env::var("HOME").unwrap() + "/.config/FokEdit")).unwrap();
@@ -522,6 +526,7 @@ impl Editor for Program {
 {{
   theme = presets.minimal;
   ops = {{
+    tab_size = 4;
     line_numbers = {{
       enable = false;
     }};
@@ -533,6 +538,9 @@ impl Editor for Program {
     debug = {{
       cursor = true;
     }};
+  }};
+  foklang = {{
+    persistence = true;
   }};
   keybinds = [ 
     {{
@@ -555,18 +563,26 @@ impl Editor for Program {
 
 }}", presets = &(env::var("HOME").unwrap() + "/.config/FokEdit/presets.fok"))).unwrap();
     }
-    let raw = self.foklang.raw_run(String::from("rgb x y z = x:(y:[z]); states = {control=0; command=1; input=2; select=3; all=[0..3]};") 
+    let panics = std::panic::catch_unwind(|| {
+      let raw = self.foklang.clone().raw_run(String::from("rgb x y z = x:(y:[z]); states = {control=0; command=1; input=2; select=3; all=[0..3]};") 
       + &fs::read_to_string(&(env::var("HOME").unwrap() + "/.config/FokEdit/configuration.fok")).unwrap(), self.clone());
-    
-    let ran = foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, self.clone()) });
 
-    match ran.value {
-      foklang::core::AST::Fructa::ProgramModifier(nprog) => {
-        *self = nprog;
+      foklang::core::builtins::load_fokedit_config(foklang::core::builtins::Arguments { function: foklang::core::builtins::FunctionArgs::singleProgram(raw, self.clone()) })
+    });
+    
+    if panics.is_ok() { /* safety layer */
+      let ran = panics.unwrap();
+      match ran.value {
+        foklang::core::AST::Fructa::ProgramModifier(nprog) => {
+          *self = nprog;
+        }
+        _ => {}
       }
-      _ => {}
+    } else {
+      self.io = "Error: Can't evaluate config file!!".to_string();
     }
   }
+  /* vital editor's functions */
   fn close(&mut self, id: usize) {
     self.buffers.remove(id);
   }
@@ -1085,6 +1101,9 @@ impl EditorBuffer {
     result
   }
 }
+
+/* basic key events + keybinds */
+
 fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
   let (tery, terx) = (get_terminal_size().unwrap().rows,  get_terminal_size().unwrap().cols);
   let mut overridek = false;
@@ -1468,6 +1487,48 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
           },
         }
       },
+      KeyCode::Tab => {
+        match program.state {
+          State::Command => {
+            let left = (program.io[0..program.io_cursor as usize]).to_owned() + &vec![' '; program.config.ops.tab_size].into_iter().collect::<String>();
+            program.io = left + &program.io[program.io_cursor as usize..];
+            program.move_io_cursor(1);
+          },
+          State::Input => {
+            match program.get_buffer().buf_type.clone() {
+              BufferType::File => {
+                program.write_string(vec![' '; program.config.ops.tab_size].into_iter().collect::<String>());
+                program.move_cursor((program.config.ops.tab_size as i32,0));
+              }
+              _ => {}
+            }
+          },
+          State::Selection => {
+            let mut selection = program.get_buffer().selection;
+
+            if selection.1.1 < selection.0.1 {
+              let s0 = selection.0;
+              selection.0.1 = selection.1.1;
+              selection.0.0 = selection.1.0;
+              selection.1.1 = s0.1;
+              selection.1.0 = s0.0;
+            }
+            if selection.0.1 == selection.1.1 && selection.0.0 > selection.1.0 {
+              let s10 = selection.1.0;
+              selection.1.0 = selection.0.0;
+              selection.0.0 = s10;
+            }
+
+            let tab = &vec![' '; program.config.ops.tab_size].into_iter().collect::<String>();
+            for i in selection.0.1..selection.1.1+1 {
+              let line = &program.get_buffer().lines[i as usize];
+              program.get_buffer().lines[i as usize] = tab.to_string() + line;
+            }
+            program.move_selection((4,0));
+          },
+          _ => {}
+        }
+      },
       KeyCode::Char(c) => {
         match program.state { 
           State::Command => {
@@ -1500,6 +1561,9 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
   }
   program.clone()
 }
+
+
+/* main: setup */
 
 
 fn main() {
@@ -1565,6 +1629,7 @@ fn main() {
     
     let event = KeyEvent{
       code: match c { BACKSPACE => KeyCode::Backspace, ':' => KeyCode::Colon, '\n' => KeyCode::Enter,
+          '\t' => KeyCode::Tab,
           'Ã' => {
             match getch() {
               '³' => {
@@ -1658,9 +1723,8 @@ fn main() {
     let panics = std::panic::catch_unwind(|| {
       handle_key_event(&mut program.clone(), event.clone())
     });
-    //self.foklang.env = foklang.lock().unwrap().env.clone(); // call panic
     
-    if panics.is_ok() {
+    if panics.is_ok() { /* safety layer */
       program = panics.unwrap().clone();
     } else {
       program.io = format!("FokEdit panicked trying to handle: {:#?}.", event.code);
@@ -1672,7 +1736,7 @@ fn main() {
     }
     program.display();
   }
-  program.clear();
+  program.clear(); // clear exit
 
 }
 

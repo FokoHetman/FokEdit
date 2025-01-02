@@ -27,6 +27,9 @@
     };
 
   };
+  foklang = {
+    persistence = true;
+  };
 
   elements = {
     empty_line = {                              #! no-line indicator
