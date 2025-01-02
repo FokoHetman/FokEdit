@@ -1333,6 +1333,24 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
           },
         }
           }
+          BufferType::Directory(_) => {
+            match program.state {
+              State::Command => {
+                if program.io_cursor > 1 {
+              let mut ioc = program.io.chars().collect::<Vec<char>>();
+              ioc.remove(program.io_cursor as usize -1);
+              program.io = ioc.into_iter().collect::<String>();
+              program.move_io_cursor(-1);
+              if program.io.len()==0 { // not needed (?)
+                program.state = State::Control;
+              }
+            } else {
+              program.state = State::Control;
+            }
+              },
+              _ => {}
+            }
+          },
           _ => {},
         }
       },
@@ -1483,6 +1501,12 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
                 match program.get_buffer().buf_type.clone() {
                   BufferType::File => {
                     program.move_cursor((1, 0));
+                  },
+                  BufferType::Directory(d) => {
+                    program.open(d.subdirs[d.selected_index].abs_path.clone());
+                    program.close(program.current);
+                    program.current = program.buffers.len()-1;
+                    program.state = State::Control;
                   },
                   _ => {},
                 }
