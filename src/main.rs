@@ -1394,8 +1394,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
                     d.subdirs[d.selected_index].selected = false;
                     if d.selected_index as i32 -1 < 0 {
                       d.selected_index = d.subdirs.len()-1;
+                      program.move_cursor((0,i32::MAX));
                     } else {
                       d.selected_index -= 1;
+                      program.move_cursor((0,-1));
                     }
                     d.subdirs[d.selected_index].selected = true;
                     program.get_buffer().lines = d.clone().getlines();
@@ -1434,8 +1436,10 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
                     d.subdirs[d.selected_index].selected = false;
                     if d.selected_index as i32 +1 == d.subdirs.len() as i32 {
                       d.selected_index = 0;
+                      program.move_cursor((0,-i32::MAX));
                     } else {
                       d.selected_index += 1;
+                      program.move_cursor((0,1));
                     }
 
                     d.subdirs[d.selected_index].selected = true;
