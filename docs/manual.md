@@ -25,6 +25,7 @@ Schemat głównego pliku konfiguracji wygląda mniej więcej tak:
   theme = {};
   elements = {};
   ops = {};
+  foklang = {};
   keybinds = [];
 }
 ```
@@ -38,6 +39,9 @@ Omawiając po kolei:
 * ops - opcje edytora
 * * line_numbers - numerowanie linijek
 * * * enable - czy numerowanie jest włączone, domyślna wartość to `false`.
+* foklang - ustawienia języka embed'owanego (Foklang-FokEdit)
+* * persistence - zachowywanie zmiennych
+* * rc - RC programu
 * keybinds - lista keybindów edytora.
 
 
@@ -66,7 +70,7 @@ presets = load_file "/home/foko/.config/FokEdit/presets.fok";
 {
   theme = presets.minimal;
   ops = {
-    tab_size = 2;
+    tab_size = 4;
     line_numbers = {
       enable = false;
     };
@@ -81,6 +85,10 @@ presets = load_file "/home/foko/.config/FokEdit/presets.fok";
   };
   foklang = {
     persistence = true;
+    rc = 
+"
+cy = program.cursor.y; #! basically, a shortcut
+"; #! `rc` is code that is ran right at the start, meaning it defines some values etc. Technically speaking this whole config is `rc`.
   };
   keybinds = [ 
     {
@@ -117,5 +125,13 @@ Lista wbudowanych komend FokLang-FokEdit:
 * `[b/setbuf] [buffer: i32]` - zmień aktywny buffer na argument                     #! ex. `b 3`, `b 1`, `b 0`
 * `[o/open] [nazwa pliku: String]` - otwórz plik w nowym bufferze                   #! ex. `o "configuration.fok"`, `o "/home/foko/Projects/test.txt"`
 * `[load_fokedit] [konfiguracja: {}]` - załaduj konfigurację z argumentu            #! ex. `load_fokedit {theme = presets.gruvbox;}`
-* `[program]` - zbiór kilku zmiennych (aktualnie jedynie cursor)                    #! ex. `program.cursor`
+* `[program]` - zbiór kilku zmiennych (aktualnie jedynie cursor)                    #! ex. `program.cursor.y`
+
+
+Foklang pozwala na ciekawe kombinacje operacji:
+```
+c = program.cursor.y
+```
+następnie można przemieszczać kursor relatywnie do aktualnej pozycji, tzn. `c+5`, `c-5`, et cetera.
+
 
