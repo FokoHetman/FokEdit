@@ -1413,6 +1413,7 @@ fn handle_key_event(program: &mut Program, event: KeyEvent) -> Program {
                     if d.selected_index as i32 -1 < 0 {
                       d.selected_index = d.subdirs.len()-1;
                       program.move_cursor((0,i32::MAX));
+                      program.move_cursor((0,-1));
                     } else {
                       d.selected_index -= 1;
                       program.move_cursor((0,-1));
