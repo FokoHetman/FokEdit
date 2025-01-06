@@ -818,7 +818,10 @@ pub fn program(arguments: Arguments) -> Proventus {
     FunctionArgs::zerumProgram(program) => {
       let mut program = program;
       Proventus{value: Fructa::Causor(vec![
-        (identifier("cursor"), Proventus{value: Fructa::Inventarii(vec![int(program.get_buffer().cursor.0 as i32), int(program.get_buffer().cursor.1 as i32)]), id: -5}),
+        (identifier("cursor"), Proventus{value: Fructa::Causor(vec![
+          (identifier("x"), int(program.get_buffer().cursor.0 as i32)),
+          (identifier("y"), int(program.get_buffer().cursor.1 as i32)),
+        ]), id: -5})
       ]), id: -5}
     }
     _ => panic!("?")
