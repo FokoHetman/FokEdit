@@ -638,9 +638,15 @@ pub fn load_fokedit_config(arguments: Arguments) -> Proventus {
       let foklangc = getw(config.clone(), "foklang");
       match foklangc.value {
         Fructa::Causor(_) => {
-          match getw(foklangc, "persistence").value {
+          match getw(foklangc.clone(), "persistence").value {
             Fructa::Condicio(b) => {
               foklang.persistence = b;
+            }
+            _ => {}
+          }
+          match getw(foklangc.clone(), "rc").value {
+            Fructa::Inventarii(_) => {
+              foklang.rc = combine_list_to_string(getw(foklangc, "rc"));
             }
             _ => {}
           }

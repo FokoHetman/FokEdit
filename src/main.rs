@@ -210,10 +210,11 @@ impl Default for FokEditOps {
 #[derive(Debug,Clone,PartialEq)]
 pub struct FokLangSettings { 
   persistence: bool,
+  rc: String,
 }
 impl Default for FokLangSettings {
   fn default() -> Self {
-    Self {persistence: false}
+    Self {persistence: false, rc: String::new()}
   }
 }
 
@@ -541,6 +542,10 @@ impl Editor for Program {
   }};
   foklang = {{
     persistence = true;
+    rc = 
+\"
+cy = program.cursor.y; #! basically, a shortcut
+\"; #! `rc` is code that is ran right at the start, meaning it defines some values etc. Technically speaking this whole config is `rc`.
   }};
   keybinds = [ 
     {{
@@ -581,12 +586,32 @@ impl Editor for Program {
     } else {
       self.io = "Error: Can't evaluate config file!!".to_string();
     }
+    let foklang = Arc::new(Mutex::new(self.foklang.clone()));
+    let panics = std::panic::catch_unwind(|| {
+      let mut lock = foklang.lock();
+      let (program,io) = lock.as_mut().unwrap().run(self.config.foklang.rc.clone(), self.clone()); // foklang.run returns display of returned value from foklang code
+      //drop(foklang);
+      drop(lock);
+      (program,io)}
+    );
+    //self.foklang.env = foklang.lock().unwrap().env.clone(); // call panic
+    
+    if panics.is_ok() {
+      let uw = panics.unwrap();
+      *self = uw.0;
+      if self.config.foklang.persistence {
+        self.foklang.env = foklang.lock().unwrap().env.clone(); // persistence
+      }
+    } else {
+      self.io = String::from("Foklang/FokEdit RC failed to evaluate");
+    }
   }
   /* vital editor's functions */
   fn close(&mut self, id: usize) {
     self.buffers.remove(id);
   }
   fn open(&mut self, fname: String) {
+    let fname = fname.replace("~", &env::var("HOME").unwrap());
     if Path::new(&fname).exists() {
       if Path::new(&fname).is_dir() {
         let mut prov = Provider { subdirs: vec![], selected_index: 0, exit: false };
