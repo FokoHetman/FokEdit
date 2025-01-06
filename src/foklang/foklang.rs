@@ -1,9 +1,6 @@
-use crate::foklang::core;
+use crate::{foklang::core, Editor};
 use std::{
-  io,
-  io::{Read,Write},
-  env,
-  fs,
+  cmp, env, fs, io::{self, Read, Write}
 };
 use crate::Program;
 
@@ -34,6 +31,13 @@ impl Foklang {
     match value {
       core::AST::Fructa::ProgramModifier(nprogram) => {
         (nprogram.clone(), nprogram.io)
+      }
+      core::AST::Fructa::Numerum(i) => {
+        let mut i = i;
+        let mut nprogram = program.clone();
+        if i<0 { i = 0 };
+        nprogram.get_buffer().cursor.1 = cmp::min((nprogram.get_buffer().lines.len() as i32-1).abs() as u32, i as u32);
+        (nprogram, value.display())
       }
       _ => {
         (program,value.display())

@@ -1762,6 +1762,17 @@ fn main() {
     if program.exit || program.buffers.len() == 0 {
       break;
     }
+    let panics = std::panic::catch_unwind(|| {
+      program.clone().display();
+    });
+    
+    if panics.is_ok() { /* safety layer */
+      panics.unwrap();
+    } else {
+      program.clear();
+      println!("\x1b[38;2;255;0;0mError: Failed to display contents - perhaps unicode issues?\x1b[0m");
+      panic!("panicked due to above reason")
+    }
     program.display();
   }
   program.clear(); // clear exit
